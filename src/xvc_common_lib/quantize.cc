@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include "xvc_common_lib/quantize.h"
@@ -68,13 +71,6 @@ Qp::Qp(int qp, ChromaFormat chroma_format, int bitdepth, double lambda,
   lambda_[2] = lambda / distortion_weight_[2];
 }
 
-int Qp::GetQpFromLambda(int bitdepth, double lambda) {
-  int qp = static_cast<int>(
-    std::floor((3.0 * (log(lambda / 0.57) / log(2.0))) + 0.5));
-  return util::Clip3(12 + qp, constants::kMinAllowedQp,
-                     constants::kMaxAllowedQp);
-}
-
 int Qp::ScaleChromaQp(int qp, ChromaFormat chroma_format, int bitdepth,
                       int chroma_scaling_table, int offset) {
   int chroma_qp = util::Clip3(qp + offset, 0, kChromaQpMax_);
@@ -88,47 +84,11 @@ double Qp::GetChromaDistWeight(int qp, ChromaFormat chroma_format,
                                int chroma_scaling_table, int offset) {
   int chroma_qp = util::Clip3(qp, 0, kChromaQpMax_);
   int chroma_qp_with_offset = util::Clip3(qp + offset, 0, kChromaQpMax_);
-  int comp_qp_offset = 0;
+  int comp_qp_offset = chroma_qp_with_offset - chroma_qp;
   if (chroma_format == ChromaFormat::k420 && chroma_scaling_table == 1) {
     comp_qp_offset = kChromaScale_[chroma_qp_with_offset] - chroma_qp;
   }
   return pow(2.0, -comp_qp_offset / 3.0);
-}
-
-double Qp::CalculateLambda(int qp, PicturePredictionType pic_type,
-                           int sub_gop_length, int temporal_id,
-                           int max_temporal_id, int scaling_type) {
-  int qp_temp = qp - 12;
-  double lambda = pow(2.0, qp_temp / 3.0);
-  double pic_type_factor =
-    pic_type == PicturePredictionType::kIntra ? 0.57 : 0.68;
-  double subgop_factor =
-    1.0 - util::Clip3(0.05 * (sub_gop_length - 1), 0.0, 0.5);
-  double hierarchical_factor = 1;
-  if (temporal_id > 0 && temporal_id == max_temporal_id) {
-    subgop_factor = 1.0;
-    hierarchical_factor = util::Clip3(qp_temp / 6.0, 2.0, 4.0);
-  } else if (temporal_id > 0) {
-    hierarchical_factor = util::Clip3(qp_temp / 6.0, 2.0, 4.0);
-    hierarchical_factor *= 0.8;
-  }
-  if (sub_gop_length == 16 && pic_type != PicturePredictionType::kIntra) {
-    if (scaling_type == 0) {
-      static const std::array<double, 5> temporal_factor = { {
-          0.6, 0.2, 0.33, 0.33, 0.4
-        } };
-      hierarchical_factor =
-        temporal_id == 0 ? 1 : util::Clip3(qp_temp / 6.0, 2.0, 4.0);
-      return temporal_factor[temporal_id] * hierarchical_factor * lambda;
-    } else {
-      static const std::array<double, 5> temporal_factor = { {
-          0.14, 0.2, 0.33, 0.33, 0.4
-        } };
-      hierarchical_factor = util::Clip3(qp_temp / 6.0, 2.0, 4.0);
-    return temporal_factor[temporal_id] * hierarchical_factor * lambda;
-    }
-  }
-  return pic_type_factor * subgop_factor * hierarchical_factor * lambda;
 }
 
 void Quantize::Inverse(YuvComponent comp, const Qp &qp, int width, int height,

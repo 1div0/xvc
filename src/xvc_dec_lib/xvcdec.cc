@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include "xvc_dec_lib/xvcdec.h"
@@ -53,6 +56,8 @@ extern "C" {
     param->max_framerate = xvc::constants::kTimeScale;
     param->threads = -1;
     param->simd_mask = static_cast<uint32_t>(-1);
+    param->dither = 1;
+    param->additional_decoder_buffers = 0;
     return XVC_DEC_OK;
   }
 
@@ -120,6 +125,7 @@ extern "C" {
     decoder->SetOutputBitdepth(param->output_bitdepth);
     decoder->SetDecoderTicks(static_cast<int>(xvc::constants::kTimeScale
                                               / param->max_framerate + 0.5));
+    decoder->SetDithering(param->dither != 0);
     return decoder;
   }
 
@@ -153,11 +159,19 @@ extern "C" {
       return XVC_DEC_INVALID_ARGUMENT;
     }
     xvc::Decoder *lib_decoder = reinterpret_cast<xvc::Decoder*>(decoder);
-    lib_decoder->DecodeNal(nal_unit, nal_unit_size, user_data);
+    size_t decoded_bytes =
+      lib_decoder->DecodeNal(nal_unit, nal_unit_size, user_data);
+    if (decoded_bytes != xvc::Decoder::kInvalidNal &&
+        decoded_bytes < nal_unit_size) {
+      lib_decoder->DecodeNal(nal_unit + decoded_bytes,
+                             nal_unit_size - decoded_bytes, user_data);
+    }
 
     xvc::Decoder::State dec_state = lib_decoder->GetState();
     if (dec_state == xvc::Decoder::State::kDecoderVersionTooLow) {
       return XVC_DEC_BITSTREAM_VERSION_HIGHER_THAN_DECODER;
+    } else if (dec_state == xvc::Decoder::State::kBitstreamVersionTooLow) {
+      return XVC_DEC_BITSTREAM_VERSION_LOWER_THAN_SUPPORTED_BY_DECODER;
     } else if (dec_state == xvc::Decoder::State::kBitstreamBitdepthTooHigh) {
       return XVC_DEC_BITSTREAM_BITDEPTH_TOO_HIGH;
     } else if (dec_state == xvc::Decoder::State::kNoSegmentHeader) {
@@ -175,14 +189,10 @@ extern "C" {
       return XVC_DEC_INVALID_ARGUMENT;
     }
     xvc::Decoder *lib_decoder = reinterpret_cast<xvc::Decoder*>(decoder);
-    if (lib_decoder->GetDecodedPicture(pic_bytes)) {
-      return XVC_DEC_OK;
+    if (!lib_decoder->GetDecodedPicture(pic_bytes)) {
+      return XVC_DEC_NO_DECODED_PIC;
     }
-    xvc::Decoder::State dec_state = lib_decoder->GetState();
-    if (dec_state == xvc::Decoder::State::kNoSegmentHeader) {
-      return XVC_DEC_NO_SEGMENT_HEADER_DECODED;
-    }
-    return XVC_DEC_NO_DECODED_PIC;
+    return XVC_DEC_OK;
   }
 
   static
@@ -229,7 +239,7 @@ extern "C" {
         return "Invalid bitdepth";
       case XVC_DEC_BITSTREAM_VERSION_HIGHER_THAN_DECODER:
         return "The xvc version indicated in the segment header is "
-          "higher than the xvc version of the decoder."
+          "higher than the xvc version of the decoder. "
           "Please update the xvc decoder to the latest version.";
       case XVC_DEC_NO_SEGMENT_HEADER_DECODED:
         return "No segment header decoded";
@@ -240,6 +250,11 @@ extern "C" {
           "(by setting XVC_HIGH_BITDEPTH equal to 1).";
       case XVC_DEC_INVALID_PARAMETER:
         return "Invalid parameter";
+      case XVC_DEC_BITSTREAM_VERSION_LOWER_THAN_SUPPORTED_BY_DECODER:
+        return "Non-conforming bitstream detected. "
+          "The xvc version indicated in the segment header is "
+          "lower than what is supported by this version of the decoder. "
+          "Please convert the bitstream to a supported version.";
       default:
         return "Unkown error";
     }

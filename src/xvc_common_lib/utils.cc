@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include "xvc_common_lib/utils.h"
@@ -25,17 +28,28 @@ namespace util {
 // TODO(dev) this should really be a lookup table
 int SizeToLog2(int size) {
   int log2 = 1;
-  while ((1 << log2) < size)
+  while ((1 << log2) < size) {
     log2++;
+  }
   return log2;
 }
 
 // TODO(dev) this should really be a lookup table
 int SizeLog2Bits(int size) {
   int log2 = 1;
-  while ((1 << log2) < size)
+  while ((1 << log2) < size) {
     log2++;
+  }
   return log2 - 2;
+}
+
+int Log2Floor(int x) {
+  int log2 = 0;
+  while (x > 1) {
+    log2++;
+    x >>= 1;
+  }
+  return log2;
 }
 
 int GetChromaShiftX(ChromaFormat chroma_format) {
@@ -52,7 +66,7 @@ int GetChromaShiftX(ChromaFormat chroma_format) {
     case ChromaFormat::k444:
       return 0;
       break;
-    case ChromaFormat::kUndefinedChromaFormat:
+    case ChromaFormat::kUndefined:
     default:
       assert(0);
       return 0;
@@ -74,7 +88,7 @@ int GetChromaShiftY(ChromaFormat chroma_format) {
     case ChromaFormat::k444:
       return 0;
       break;
-    case ChromaFormat::kUndefinedChromaFormat:
+    case ChromaFormat::kUndefined:
     default:
       assert(0);
       return 0;
@@ -99,7 +113,7 @@ int ScaleChromaX(int size, ChromaFormat chroma_format) {
     case ChromaFormat::kArgb:
       return size;
       break;
-    case ChromaFormat::kUndefinedChromaFormat:
+    case ChromaFormat::kUndefined:
     default:
       assert(0);
       return 0;
@@ -124,7 +138,7 @@ int ScaleChromaY(int size, ChromaFormat chroma_format) {
     case ChromaFormat::kArgb:
       return size;
       break;
-    case ChromaFormat::kUndefinedChromaFormat:
+    case ChromaFormat::kUndefined:
     default:
       assert(0);
       return 0;

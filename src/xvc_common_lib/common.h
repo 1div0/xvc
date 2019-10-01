@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #ifndef XVC_COMMON_LIB_COMMON_H_
@@ -47,11 +50,11 @@ enum class ChromaFormat : uint8_t {
   k422 = 2,
   k444 = 3,
   kArgb = 4,
-  kUndefinedChromaFormat = 255,
+  kUndefined = 255,
 };
 
 enum class ColorMatrix : uint8_t {
-  kUndefinedColorMatrix = 0,
+  kUndefined = 0,
   k601 = 1,
   k709 = 2,
   k2020 = 3,
@@ -72,22 +75,25 @@ namespace constants {
 
 // xvc version
 const uint32_t kXvcCodecIdentifier = 7894627;
-const uint32_t kXvcMajorVersion = 1;
+const uint32_t kXvcMajorVersion = 2;
 const uint32_t kXvcMinorVersion = 0;
+static const uint32_t kSupportedOldBitstreamVersions[1][2] = { { 1, 0 } };
 
 // Picture
 const int kMaxYuvComponents = 3;
+const int kMaxNumPlanes = 2;  // luma and chroma
 const int kMaxNumCuTrees = 2;
 
 // CU limits
-const int kCtuSize = 64;
+const int kCtuSizeLog2 = 6;
+const int kCtuSize = 1 << kCtuSizeLog2;
 // CU size and depth for luma
 const int kMaxCuDepth = 3;
 const int kMaxCuDepthChroma = kMaxCuDepth + 1;
 const int kMinCuSize = (kCtuSize >> kMaxCuDepth);
 // Binary split
 const int kMaxBinarySplitDepth = 3;
-const int kMaxBinarySplitSizeInter = 128;
+const int kMaxBinarySplitSizeInter = kCtuSize;
 const int kMaxBinarySplitSizeIntra1 = 32;
 const int kMaxBinarySplitSizeIntra2 = 16;
 const int kMinBinarySplitSize = 4;
@@ -104,15 +110,16 @@ const int kMaxBlockSamples = kMaxBlockSize * kMaxBlockSize;
 const int kQuadSplit = 4;
 
 // Transform
-const int kTransformExtendedPrecision = 2;
-const bool kZeroOutHighFreqLargeTransforms = true;
+const int kTransformSkipMaxArea = 4 * 4;
+const int kTransformSelectMinSigCoeffs = 3;
+const int kTransformZeroOutMinSize = 32;
+const int kMaxTransformSelectIdx = 4;
 
 // Prediction
 const int kNumIntraMpm = 3;
-const int kNumIntraChromaModes = 5;
+const int kNumIntraMpmExt = 6;
 const int kNumInterMvPredictors = 2;
 const int kNumInterMergeCandidates = 5;
-const int kMvPrecisionShift = 2;
 const bool kTemporalMvPrediction = true;
 
 // Quant
@@ -142,8 +149,7 @@ const int kMaxTid = 8;
 const int kFrameRateBitDepth = 24;
 const int kPicSizeBits = 16;
 const PicNum kMaxSubGopLength = 64;
-const int kEncapsulationCode1 = 182;
-const int kEncapsulationCode2 = 214;
+const int kEncapsulationCode = 86;
 
 // Min and Max
 const int16_t kInt16Max = INT16_MAX;

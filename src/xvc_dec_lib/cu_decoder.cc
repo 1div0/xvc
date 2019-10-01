@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include "xvc_dec_lib/cu_decoder.h"
@@ -25,14 +28,13 @@
 
 namespace xvc {
 
-CuDecoder::CuDecoder(const SimdFunctions &simd, const Qp &pic_qp,
-                     YuvPicture *decoded_pic, PictureData *pic_data)
+CuDecoder::CuDecoder(const SimdFunctions &simd, YuvPicture *decoded_pic,
+                     PictureData *pic_data)
   : min_pel_(0),
   max_pel_((1 << decoded_pic->GetBitdepth()) - 1),
-  pic_qp_(pic_qp),
   decoded_pic_(*decoded_pic),
   pic_data_(*pic_data),
-  inter_pred_(simd.inter_prediction, decoded_pic->GetBitdepth()),
+  inter_pred_(simd.inter_prediction, *decoded_pic, decoded_pic->GetBitdepth()),
   intra_pred_(decoded_pic->GetBitdepth()),
   inv_transform_(decoded_pic->GetBitdepth()),
   quantize_(),
@@ -63,8 +65,11 @@ void CuDecoder::ReadCtu(int rsaddr, SyntaxReader * reader) {
     read_delta_qp |= cu_reader_.ReadCtu(ctu2, reader);
   }
   int qp = pic_data_.GetPicQp()->GetQpRaw(YuvComponent::kY);
-  if (pic_data_.GetAdaptiveQp() && read_delta_qp) {
-    qp = reader->ReadQp();
+  if (pic_data_.GetAdaptiveQp() > 0 && read_delta_qp) {
+    int predicted_qp = ctu->GetPredictedQp();
+    qp = reader->ReadQp(predicted_qp, qp, pic_data_.GetAdaptiveQp());
+  } else if (pic_data_.GetAdaptiveQp() == 2) {
+    qp = ctu->GetPredictedQp();
   }
   ctu->SetQp(qp);
   if (pic_data_.HasSecondaryCuTree()) {
@@ -106,15 +111,10 @@ void CuDecoder::DecompressComponent(CodingUnit *cu, YuvComponent comp,
 
   // Predict
   if (cu->IsIntra()) {
-    Sample *dec = decoded_pic_.GetSamplePtr(comp, cu_x, cu_y);
-    ptrdiff_t dec_stride = decoded_pic_.GetStride(comp);
-    IntraMode intra_mode = cu->GetIntraMode(comp);
-    intra_pred_.Predict(intra_mode, *cu, comp, dec, dec_stride,
-                        pred_buffer.GetDataPtr(), pred_buffer.GetStride());
+    PredictIntra(*cu, comp, &pred_buffer);
   } else {
     inter_pred_.CalculateMV(cu);
-    inter_pred_.MotionCompensation(*cu, comp, pred_buffer.GetDataPtr(),
-                                   pred_buffer.GetStride());
+    inter_pred_.MotionCompensation(*cu, comp, &pred_buffer);
   }
   if (!cbf) {
     return;
@@ -127,13 +127,23 @@ void CuDecoder::DecompressComponent(CodingUnit *cu, YuvComponent comp,
                     temp_coeff_.GetDataPtr(), temp_coeff_.GetStride());
 
   // Inverse transform
-  const bool is_luma_intra = util::IsLuma(comp) && cu->IsIntra();
-  inv_transform_.Transform(width, height, is_luma_intra,
-                           temp_coeff_.GetDataPtr(), temp_coeff_.GetStride(),
-                           temp_resi_.GetDataPtr(), temp_resi_.GetStride());
+  if (!cu->GetTransformSkip(comp)) {
+    inv_transform_.Transform(*cu, comp, temp_coeff_, &temp_resi_);
+  } else {
+    inv_transform_.TransformSkip(width, height, temp_coeff_, &temp_resi_);
+  }
 
   // Reconstruct
   dec_buffer.AddClip(width, height, temp_pred_, temp_resi_, min_pel_, max_pel_);
+}
+
+void CuDecoder::PredictIntra(const CodingUnit &cu, YuvComponent comp,
+                             SampleBuffer *pred_buffer) {
+  const IntraMode intra_mode = cu.GetIntraMode(comp);
+  IntraPrediction::RefState ref_state;
+  intra_pred_.FillReferenceState(cu, comp, decoded_pic_, &ref_state);
+  intra_pred_.Predict(intra_mode, cu, comp, ref_state, decoded_pic_,
+                      pred_buffer);
 }
 
 }   // namespace xvc

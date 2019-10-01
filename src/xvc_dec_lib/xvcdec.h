@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #ifndef XVC_DEC_LIB_XVCDEC_H_
@@ -24,6 +27,17 @@
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+#if defined (_WIN32)
+#if defined(xvc_dec_lib_EXPORTS)
+#define XVC_DEC_API __declspec(dllexport)
+#elif defined(XVC_SHARED_LIB)
+#define XVC_DEC_API __declspec(dllimport)
+#endif
+#endif
+#ifndef XVC_DEC_API
+#define XVC_DEC_API
 #endif
 
 #define XVC_DEC_API_VERSION   1
@@ -39,6 +53,7 @@ extern "C" {
     XVC_DEC_BITSTREAM_VERSION_HIGHER_THAN_DECODER,
     XVC_DEC_NO_SEGMENT_HEADER_DECODED,
     XVC_DEC_BITSTREAM_BITDEPTH_TOO_HIGH,
+    XVC_DEC_BITSTREAM_VERSION_LOWER_THAN_SUPPORTED_BY_DECODER,
   } xvc_dec_return_code;
 
   typedef enum {
@@ -77,17 +92,19 @@ extern "C" {
     double framerate;
     double bitstream_framerate;
     int32_t conforming;
+    int32_t profile;
   } xvc_dec_pic_stats;
 
   // Represents a decoded picture
   // Lifecycle managed by api->picture_create & api->picture_destory
+  // Populated using api->decoder_get_picture
   typedef struct xvc_decoded_picture {
-    char* bytes;      // Adress of first picture sample
-    size_t size;      // Number of picture bytes for all planes (incl. padding)
-    char *planes[3];  // Adress of first sample for each plane
-    int stride[3];    // Width in bytes for each plane (including padding)
+    const char* bytes;  // Address of first picture sample
+    size_t size;        // Number of pic bytes for all planes (incl. padding)
+    const char *planes[3];  // Address of first sample for each plane
+    int stride[3];          // Width in bytes for each plane (including padding)
     xvc_dec_pic_stats stats;
-    int64_t user_data;  //
+    int64_t user_data;
   } xvc_decoded_picture;
 
   // xvc decoder instance
@@ -105,6 +122,8 @@ extern "C" {
     double max_framerate;
     int threads;
     uint32_t simd_mask;
+    int dither;
+    int additional_decoder_buffers;
   } xvc_decoder_parameters;
 
   // xvc decoder api
@@ -133,6 +152,8 @@ extern "C" {
                                              const uint8_t *nal_unit,
                                              size_t nal_unit_size,
                                              int64_t user_data);
+    // Get next output picture that is available in display order.
+    // Pointers to picture sample data are only valid until next API call.
     xvc_dec_return_code(*decoder_get_picture)(xvc_decoder *decoder,
                                               xvc_decoded_picture *out_pic);
     xvc_dec_return_code(*decoder_flush)(xvc_decoder *decoder);
@@ -143,7 +164,7 @@ extern "C" {
   } xvc_decoder_api;
 
   // Starting point for using the xvc decoder api
-  const xvc_decoder_api* xvc_decoder_api_get(void);
+  XVC_DEC_API const xvc_decoder_api* xvc_decoder_api_get(void);
 
 #ifdef __cplusplus
 }  // extern "C"

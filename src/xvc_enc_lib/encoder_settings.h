@@ -1,23 +1,29 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #ifndef XVC_ENC_LIB_ENCODER_SETTINGS_H_
 #define XVC_ENC_LIB_ENCODER_SETTINGS_H_
+
+#include <array>
+#include <string>
 
 #include "xvc_common_lib/restrictions.h"
 
@@ -26,7 +32,8 @@ namespace xvc {
 enum struct SpeedMode {
   kPlacebo = 0,
   kSlow = 1,
-  kTotalNumber = 2,
+  kFast = 2,
+  kTotalNumber = 3,
 };
 
 enum struct TuneMode {
@@ -36,88 +43,10 @@ enum struct TuneMode {
 };
 
 struct EncoderSettings {
-  // Initialize based on speed mode setting
-  void Initialize(SpeedMode speed_mode) {
-    switch (speed_mode) {
-      case SpeedMode::kPlacebo:
-        fast_intra_mode_eval_level = 0;
-        fast_merge_eval = 0;
-        bipred_refinement_iterations = 4;
-        always_evaluate_intra_in_inter = 1;
-        default_num_ref_pics = 3;
-        max_binary_split_depth = 3;
-        break;
-      case SpeedMode::kSlow:
-        fast_intra_mode_eval_level = 1;
-        fast_merge_eval = 1;
-        bipred_refinement_iterations = 1;
-        always_evaluate_intra_in_inter = 0;
-        default_num_ref_pics = 2;
-        max_binary_split_depth = 2;
-        break;
-      default:
-        assert(0);
-        break;
-    }
-  }
-
-  // Initialize based on restricted mode setting
-  void Initialize(RestrictedMode mode) {
-    restricted_mode = mode;
-    switch (mode) {
-      case RestrictedMode::kModeA:
-        eval_prev_mv_search_result = 1;
-        fast_intra_mode_eval_level = 1;
-        fast_inter_pred_bits = 1;
-        fast_merge_eval = 0;
-        bipred_refinement_iterations = 1;
-        always_evaluate_intra_in_inter = 0;
-        smooth_lambda_scaling = 0;
-        default_num_ref_pics = 2;
-        max_binary_split_depth = 0;
-        adaptive_qp = 0;
-        chroma_qp_offset_table = 1;
-        chroma_qp_offset_u = 0;
-        chroma_qp_offset_v = 0;
-        break;
-      case RestrictedMode::kModeB:
-        fast_quad_split_based_on_binary_split = 2;
-        eval_prev_mv_search_result = 0;
-        fast_intra_mode_eval_level = 2;
-        fast_inter_pred_bits = 1;
-        fast_merge_eval = 1;
-        bipred_refinement_iterations = 1;
-        always_evaluate_intra_in_inter = 0;
-        smooth_lambda_scaling = 0;
-        default_num_ref_pics = 2;
-        max_binary_split_depth = 2;
-        adaptive_qp = 0;
-        chroma_qp_offset_table = 1;
-        chroma_qp_offset_u = 1;
-        chroma_qp_offset_v = 1;
-        break;
-      default:
-        assert(0);
-        break;
-    }
-  }
-
-  void Tune(TuneMode tune_mode) {
-    switch (tune_mode) {
-      case TuneMode::kDefault:
-        // No settings are changed in default mode.
-        break;
-      case TuneMode::kPsnr:
-        adaptive_qp = 0;
-        chroma_qp_offset_table = 0;
-        chroma_qp_offset_u = 1;
-        chroma_qp_offset_v = 1;
-        break;
-      default:
-        assert(0);
-        break;
-    }
-  }
+  void Initialize(SpeedMode speed_mode);
+  void Initialize(RestrictedMode mode);
+  void Tune(TuneMode tune_mode);
+  void ParseExplicitSettings(std::string explicit_settings);
 
   // Encoder rdo behavior
   static constexpr bool kEncoderStrictRdoBitCounting = false;
@@ -128,33 +57,48 @@ struct EncoderSettings {
 
   // Fast encoder decisions (always used)
   static const bool rdo_quant = true;
-  static const bool rdo_quant_size_2 = false;
   static const bool fast_cu_split_based_on_full_cu = true;
   static const bool fast_mode_selection_for_cached_cu = true;
   static const bool skip_mode_decision_for_identical_cu = false;
-  static const bool fast_inter_cbf_dist = true;  // not really any impact
-  static const bool fast_inter_root_cbf_zero_bits = true;  // very small loss
+  static const bool fast_inter_transform_dist = true;  // not really any impact
+  static const bool fast_inter_root_cbf_zero_bits = false;  // very small loss
+  static const int inter_search_range_bi = 4;
 
   // Speed mode dependent settings
-  int fast_intra_mode_eval_level = -1;
-  int fast_merge_eval = -1;
+  int inter_search_range_uni_max = 256;
+  int inter_search_range_uni_min = 96;
   int bipred_refinement_iterations = -1;
   int always_evaluate_intra_in_inter = -1;
   int default_num_ref_pics = -1;
   int max_binary_split_depth = -1;
+  int fast_transform_select_eval = -1;
+  int fast_intra_mode_eval_level = -1;
+  int fast_transform_size_64 = -1;
+  int fast_transform_select = -1;
+  int fast_inter_local_illumination_comp = -1;
+  int fast_inter_adaptive_fullpel_mv = -1;
 
-  // Setting with default values used in all speed modes
+  // Settings with default values used in all speed modes
+  int fast_merge_eval = 1;
   int fast_quad_split_based_on_binary_split = 1;
   int eval_prev_mv_search_result = 1;
   int fast_inter_pred_bits = 0;
+  int rdo_quant_2x2 = 1;
+  int intra_qp_offset = 0;
   int smooth_lambda_scaling = 1;
-  int adaptive_qp = 1;
-  double aqp_strength = 1.0;
-  int structural_ssd = 0;
+  int adaptive_qp = 2;
+  int aqp_strength = 13;
+  int structural_ssd = 1;
+  int structural_strength = 16;
   int encapsulation_mode = 0;
+  int leading_pictures = 0;
+  int source_padding = 1;
   int chroma_qp_offset_table = 1;
   int chroma_qp_offset_u = 0;
   int chroma_qp_offset_v = 0;
+  int flat_lambda = 0;
+  float lambda_scale_a = 1.0f;
+  float lambda_scale_b = 0.0f;
   RestrictedMode restricted_mode = RestrictedMode::kUnrestricted;
 };
 

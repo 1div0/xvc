@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include <array>
@@ -46,12 +49,9 @@ protected:
     xvc::CodingUnit *cu = pic_data.CreateCu(cu_tree, 0, 0, 0, width_, height_);
     cu->SetPredMode(xvc::PredictionMode::kInter);  // for diag scan order
     xvc::BitWriter bit_writer;
-    xvc::EntropyEncoder entropyenc(&bit_writer);
-    xvc::SyntaxWriter writer(*qp_.get(), pic_type, &entropyenc);
-    entropyenc.Start();
+    xvc::SyntaxWriter writer(*qp_, pic_type, &bit_writer);
     writer.WriteCoefficients(*cu, comp, &enc_coeff[0], coeff_stride);
-    entropyenc.EncodeBinTrm(1);
-    entropyenc.Finish();
+    writer.Finish();
     *bitstream = *bit_writer.GetBytes();
     pic_data.ReleaseCu(cu);
   }
@@ -61,13 +61,11 @@ protected:
     xvc::CodingUnit *cu = pic_data.CreateCu(cu_tree, 0, 0, 0, width_, height_);
     cu->SetPredMode(xvc::PredictionMode::kInter);  // for diag scan order
     xvc::BitReader bit_reader(&bitstream[0], bitstream.size());
-    xvc::EntropyDecoder entropydec(&bit_reader);
-    xvc::SyntaxReader reader(*qp_.get(), pic_type, &entropydec);
+    std::unique_ptr<xvc::SyntaxReader> syntax_reader =
+      xvc::SyntaxReader::Create(*qp_, pic_type, &bit_reader);
     dec_coeff.fill(0);  // caller responsiblility
-    entropydec.Start();
-    reader.ReadCoefficients(*cu, comp, &dec_coeff[0], coeff_stride);
-    ASSERT_EQ(1, entropydec.DecodeBinTrm());
-    entropydec.Finish();
+    syntax_reader->ReadCoefficients(*cu, comp, &dec_coeff[0], coeff_stride);
+    ASSERT_EQ(true, syntax_reader->Finish());
     pic_data.ReleaseCu(cu);
   }
 
@@ -144,6 +142,7 @@ TEST_P(ResidualCoding, 4x4AcOnly) {
 
 TEST_F(ResidualCoding, AllZero) {
   if (!xvc::Restrictions::Get().disable_transform_cbf) {
+    // this functionality is not used when cbf is available
     return;
   }
   enc_coeff.fill(0);

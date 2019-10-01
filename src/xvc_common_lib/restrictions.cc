@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include "xvc_common_lib/restrictions.h"
@@ -272,6 +275,66 @@ Restrictions::Restrictions() {
 #if RESTRICTION_DISABLE_EXT_DEBLOCK_SUBBLOCK_SIZE_4
   disable_ext_deblock_subblock_size_4 = true;
 #endif
+
+#if RESTRICTION_DISABLE_EXT2_INTRA_67_MODES
+  disable_ext2_intra_67_modes = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_INTRA_6_PREDICTORS
+  disable_ext2_intra_6_predictors = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_INTRA_CHROMA_FROM_LUMA
+  disable_ext2_intra_chroma_from_luma = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_INTER_ADAPTIVE_FULLPEL_MV
+  disable_ext2_inter_adaptive_fullpel_mv = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_INTER_AFFINE
+  disable_ext2_inter_affine = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_INTER_AFFINE_MERGE
+  disable_ext2_inter_affine_merge = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_INTER_AFFINE_MVP
+  disable_ext2_inter_affine_mvp = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_INTER_BIPRED_L1_MVD_ZERO
+  disable_ext2_inter_bipred_l1_mvd_zero = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_INTER_HIGH_PRECISION_MV
+  disable_ext2_inter_high_precision_mv = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_INTER_LOCAL_ILLUMINATION_COMP
+  disable_ext2_inter_local_illumination_comp = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_TRANSFORM_SKIP
+  disable_ext2_transform_skip = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_TRANSFORM_HIGH_PRECISION
+  disable_ext2_transform_high_precision = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_TRANSFORM_SELECT
+  disable_ext2_transform_select = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_TRANSFORM_DST
+  disable_ext2_transform_dst = true;
+#endif
+
+#if RESTRICTION_DISABLE_EXT2_CABAC_ALT_RESIDUAL_CTX
+  disable_ext2_cabac_alt_residual_ctx = true;
+#endif
 }
 
 void Restrictions::EnableRestrictedMode(RestrictedMode mode) {
@@ -294,7 +357,171 @@ void Restrictions::EnableRestrictedMode(RestrictedMode mode) {
     disable_ext_two_cu_trees = true;
     disable_ext_transform_size_64 = true;
     disable_ext_deblock_subblock_size_4 = true;
+    disable_ext2_intra_67_modes = true;
+    disable_ext2_intra_6_predictors = true;
+    disable_ext2_intra_chroma_from_luma = true;
+    disable_ext2_inter_adaptive_fullpel_mv = true;
+    disable_ext2_inter_affine = true;
+    disable_ext2_inter_affine_merge = true;
+    disable_ext2_inter_high_precision_mv = true;
+    disable_ext2_inter_local_illumination_comp = true;
+    disable_ext2_transform_high_precision = true;
+    disable_ext2_transform_select = true;
+    disable_ext2_cabac_alt_residual_ctx = true;
   }
+  if (mode == RestrictedMode::kModeC) {
+    disable_intra_ref_sample_filter = !disable_intra_ref_sample_filter;
+    disable_intra_dc_post_filter = !disable_intra_dc_post_filter;
+    disable_intra_ver_hor_post_filter = !disable_intra_ver_hor_post_filter;
+    disable_inter_mvp = !disable_inter_mvp;
+    disable_inter_scaling_mvp = !disable_inter_scaling_mvp;
+    disable_inter_tmvp_mvp = !disable_inter_tmvp_mvp;
+    disable_inter_tmvp_ref_list_derivation =
+      !disable_inter_tmvp_ref_list_derivation;
+    disable_inter_merge_bipred = !disable_inter_merge_bipred;
+    disable_inter_skip_mode = !disable_inter_skip_mode;
+    disable_inter_mvd_greater_than_flags =
+      !disable_inter_mvd_greater_than_flags;
+    disable_transform_adaptive_scan_order =
+      !disable_transform_adaptive_scan_order;
+    disable_transform_residual_greater2 = !disable_transform_residual_greater2;
+    disable_transform_root_cbf = !disable_transform_root_cbf;
+    disable_transform_subblock_csbf = !disable_transform_subblock_csbf;
+    disable_transform_sign_hiding = !disable_transform_sign_hiding;
+    disable_transform_adaptive_exp_golomb =
+      !disable_transform_adaptive_exp_golomb;
+    disable_cabac_skip_flag_ctx = !disable_cabac_skip_flag_ctx;
+    disable_cabac_inter_dir_ctx = !disable_cabac_inter_dir_ctx;
+    disable_cabac_subblock_csbf_ctx = !disable_cabac_subblock_csbf_ctx;
+    disable_cabac_coeff_greater2_ctx = !disable_cabac_coeff_greater2_ctx;
+    disable_cabac_coeff_last_pos_ctx = !disable_cabac_coeff_last_pos_ctx;
+    disable_cabac_init_per_pic_type = !disable_cabac_init_per_pic_type;
+    disable_cabac_init_per_qp = !disable_cabac_init_per_qp;
+    disable_deblock_strong_filter = !disable_deblock_strong_filter;
+    disable_deblock_boundary_strength_zero =
+      !disable_deblock_boundary_strength_zero;
+    disable_deblock_boundary_strength_one =
+      !disable_deblock_boundary_strength_one;
+    disable_deblock_weak_sample_decision =
+      !disable_deblock_weak_sample_decision;
+    disable_deblock_two_samples_weak_filter =
+      !disable_deblock_two_samples_weak_filter;
+    disable_ext_sink = !disable_ext_sink;
+    disable_ext_implicit_last_ctu = !disable_ext_implicit_last_ctu;
+    disable_ext_tmvp_full_resolution = !disable_ext_tmvp_full_resolution;
+    disable_ext_tmvp_exclude_intra_from_ref_list =
+      !disable_ext_tmvp_exclude_intra_from_ref_list;
+    disable_ext_ref_list_l0_trim = !disable_ext_ref_list_l0_trim;
+    disable_ext_implicit_partition_type = !disable_ext_implicit_partition_type;
+    disable_ext_cabac_alt_split_flag_ctx =
+      !disable_ext_cabac_alt_split_flag_ctx;
+    disable_ext_cabac_alt_inter_dir_ctx = !disable_ext_cabac_alt_inter_dir_ctx;
+    disable_ext_cabac_alt_last_pos_ctx = !disable_ext_cabac_alt_last_pos_ctx;
+    disable_ext_two_cu_trees = !disable_ext_two_cu_trees;
+    disable_ext_intra_unrestricted_predictor =
+      !disable_ext_intra_unrestricted_predictor;
+    disable_ext_deblock_subblock_size_4 = !disable_ext_deblock_subblock_size_4;
+    disable_ext2_intra_67_modes = !disable_ext2_intra_67_modes;
+    disable_ext2_intra_6_predictors = !disable_ext2_intra_6_predictors;
+    disable_ext2_inter_adaptive_fullpel_mv =
+      !disable_ext2_inter_adaptive_fullpel_mv;
+    disable_ext2_inter_affine = !disable_ext2_inter_affine;
+    disable_ext2_inter_affine_merge = !disable_ext2_inter_affine_merge;
+    disable_ext2_inter_affine_mvp = !disable_ext2_inter_affine_mvp;
+    disable_ext2_inter_bipred_l1_mvd_zero =
+      !disable_ext2_inter_bipred_l1_mvd_zero;
+    disable_ext2_inter_high_precision_mv =
+      !disable_ext2_inter_high_precision_mv;
+    disable_ext2_inter_local_illumination_comp =
+      !disable_ext2_inter_local_illumination_comp;
+    disable_ext2_transform_skip = !disable_ext2_transform_skip;
+    disable_ext2_transform_high_precision =
+      !disable_ext2_transform_high_precision;
+    disable_ext2_transform_dst = !disable_ext2_transform_dst;
+  }
+  if (mode == RestrictedMode::kModeD) {
+    // same as B
+    disable_ext_implicit_last_ctu = true;
+    disable_ext_tmvp_full_resolution = true;
+    disable_ext_tmvp_exclude_intra_from_ref_list = true;
+    disable_ext_ref_list_l0_trim = true;
+    disable_ext_intra_unrestricted_predictor = true;
+    // same as A
+    disable_ext_sink = true;
+    disable_ext_two_cu_trees = true;
+    disable_ext2_intra_67_modes = true;
+    disable_ext2_intra_6_predictors = true;
+    disable_ext2_intra_chroma_from_luma = true;
+    disable_ext2_inter_adaptive_fullpel_mv = true;
+    disable_ext2_inter_affine = true;
+    disable_ext2_inter_affine_merge = true;
+    disable_ext2_inter_high_precision_mv = true;
+    disable_ext2_inter_local_illumination_comp = true;
+    disable_ext2_transform_high_precision = true;
+    disable_ext2_transform_select = true;
+    disable_ext2_cabac_alt_residual_ctx = true;
+    // Other
+    disable_intra_dc_post_filter = true;
+    disable_intra_ver_hor_post_filter = true;
+    disable_transform_sign_hiding = true;
+    disable_transform_adaptive_scan_order = true;
+    disable_ext2_transform_dst = true;
+  }
+}
+
+bool Restrictions::CheckBaselineCompatibility() const {
+  return (disable_intra_ref_sample_filter &&
+          disable_intra_dc_post_filter &&
+          disable_intra_ver_hor_post_filter &&
+          disable_inter_mvp &&
+          disable_inter_scaling_mvp &&
+          disable_inter_tmvp_mvp &&
+          disable_inter_tmvp_ref_list_derivation &&
+          disable_inter_merge_bipred &&
+          disable_inter_skip_mode &&
+          disable_inter_mvd_greater_than_flags &&
+          disable_transform_adaptive_scan_order &&
+          disable_transform_residual_greater2 &&
+          disable_transform_root_cbf &&
+          disable_transform_subblock_csbf &&
+          disable_transform_sign_hiding &&
+          disable_transform_adaptive_exp_golomb &&
+          disable_cabac_skip_flag_ctx &&
+          disable_cabac_inter_dir_ctx &&
+          disable_cabac_subblock_csbf_ctx &&
+          disable_cabac_coeff_greater2_ctx &&
+          disable_cabac_coeff_last_pos_ctx &&
+          disable_cabac_init_per_pic_type &&
+          disable_cabac_init_per_qp &&
+          disable_deblock_strong_filter &&
+          disable_deblock_boundary_strength_zero &&
+          disable_deblock_boundary_strength_one &&
+          disable_deblock_weak_sample_decision &&
+          disable_deblock_two_samples_weak_filter &&
+          disable_ext_sink &&
+          disable_ext_implicit_last_ctu &&
+          disable_ext_tmvp_full_resolution &&
+          disable_ext_tmvp_exclude_intra_from_ref_list &&
+          disable_ext_ref_list_l0_trim &&
+          disable_ext_implicit_partition_type &&
+          disable_ext_cabac_alt_split_flag_ctx &&
+          disable_ext_cabac_alt_inter_dir_ctx &&
+          disable_ext_cabac_alt_last_pos_ctx &&
+          disable_ext_two_cu_trees &&
+          disable_ext_intra_unrestricted_predictor &&
+          disable_ext_deblock_subblock_size_4 &&
+          disable_ext2_intra_67_modes &&
+          disable_ext2_intra_6_predictors &&
+          disable_ext2_inter_adaptive_fullpel_mv &&
+          disable_ext2_inter_affine &&
+          disable_ext2_inter_affine_merge &&
+          disable_ext2_inter_affine_mvp &&
+          disable_ext2_inter_bipred_l1_mvd_zero &&
+          disable_ext2_inter_high_precision_mv &&
+          disable_ext2_inter_local_illumination_comp &&
+          disable_ext2_transform_skip &&
+          disable_ext2_transform_high_precision &&
+          disable_ext2_transform_dst);
 }
 
 }  // namespace xvc

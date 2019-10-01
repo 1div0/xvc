@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #ifndef XVC_ENC_LIB_CU_WRITER_H_
@@ -32,13 +35,9 @@ public:
     : pic_data_(pic_data),
     intra_pred_(intra_pred) {
   }
-  bool WriteCtu(const CodingUnit &cu, SyntaxWriter *writer) {
-    ctu_has_coeffs_ = false;
-    WriteCu(cu, SplitRestriction::kNone, writer);
-    return ctu_has_coeffs_;
-  }
-  void WriteCu(const CodingUnit &cu, SplitRestriction split_restriction,
-               SyntaxWriter *writer);
+  bool WriteCtu(CodingUnit *ctu, PictureData *cu_map, SyntaxWriter *writer);
+  void WriteCu(CodingUnit *cu, SplitRestriction split_restriction,
+               PictureData *cu_map, SyntaxWriter *writer);
   void WriteSplit(const CodingUnit &cu, SplitRestriction split_restriction,
                   SyntaxWriter *writer);
   void WriteComponent(const CodingUnit &cu, YuvComponent comp,
@@ -47,10 +46,20 @@ public:
                             SyntaxWriter *writer);
   void WriteInterPrediction(const CodingUnit &cu, YuvComponent comp,
                             SyntaxWriter *writer);
-  void WriteCoefficients(const CodingUnit &cu, YuvComponent comp,
+  void WriteMergePrediction(const CodingUnit &cu, YuvComponent comp,
+                           SyntaxWriter *writer);
+  void WriteResidualData(const CodingUnit &cu, YuvComponent comp,
                          SyntaxWriter *writer);
+  // Encoder only method with simplified cbf rdo signaling
+  void WriteResidualDataRdoCbf(const CodingUnit &cu, YuvComponent comp,
+                               SyntaxWriter *writer) const;
 
 private:
+  void WriteResidualDataInternal(const CodingUnit &cu, YuvComponent comp,
+                                 SyntaxWriter *writer) const;
+  bool WriteCbfInvariant(const CodingUnit &cu, YuvComponent comp,
+                         SyntaxWriter *writer) const;
+
   const PictureData &pic_data_;
   const IntraPrediction *intra_pred_;
   bool ctu_has_coeffs_ = false;

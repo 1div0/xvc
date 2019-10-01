@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #ifndef XVC_DEC_APP_DECODER_APP_H_
@@ -59,6 +62,7 @@ private:
 
   int num_pictures_decoded_ = 0;
   int segment_info_printed_ = 0;
+  bool all_pictures_baseline_ = true;
 
   // command line arguments
   struct {
@@ -71,8 +75,9 @@ private:
     xvc_dec_color_matrix output_color_matrix = XVC_DEC_COLOR_MATRIX_UNDEFINED;
     int output_bitdepth = -1;
     int max_framerate = -1;
-    int simd_mask = -1;
     int threads = -1;
+    int simd_mask = -1;
+    int dither = -1;
     int loop = -1;
     int verbose = 0;
   } cli_;

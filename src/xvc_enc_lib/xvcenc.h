@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #ifndef XVC_ENC_LIB_XVCENC_H_
@@ -26,10 +29,22 @@
 extern "C" {
 #endif
 
+#if defined (_WIN32)
+#if defined(xvc_enc_lib_EXPORTS)
+#define XVC_ENC_API __declspec(dllexport)
+#elif defined(XVC_SHARED_LIB)
+#define XVC_ENC_API __declspec(dllimport)
+#endif
+#endif
+#ifndef XVC_ENC_API
+#define XVC_ENC_API
+#endif
+
 #define XVC_ENC_API_VERSION   1
 
   typedef enum {
     XVC_ENC_OK = 0,
+    XVC_ENC_NO_MORE_OUTPUT = 1,
     XVC_ENC_INVALID_ARGUMENT = 10,
     XVC_ENC_INVALID_PARAMETER = 20,
     XVC_ENC_SIZE_TOO_SMALL,
@@ -42,6 +57,7 @@ extern "C" {
     XVC_ENC_DEBLOCKING_SETTINGS_INVALID,
     XVC_ENC_TOO_MANY_REF_PICS,
     XVC_ENC_SIZE_TOO_LARGE,
+    XVC_ENC_NO_SUCH_PRESET = 100,
   } xvc_enc_return_code;
 
   typedef enum {
@@ -68,6 +84,10 @@ extern "C" {
     uint32_t soc;
     uint32_t tid;
     int32_t qp;
+    uint64_t sse;
+    double psnr_y;
+    double psnr_u;
+    double psnr_v;
     int32_t l0[5];
     int32_t l1[5];
   } xvc_enc_nal_stats;
@@ -79,6 +99,7 @@ extern "C" {
     size_t size;
     int buffer_flag;
     xvc_enc_nal_stats stats;
+    int64_t user_data;
   } xvc_enc_nal_unit;
 
   // Represents one reconstructed picture
@@ -105,6 +126,7 @@ extern "C" {
     uint32_t sub_gop_length;
     uint32_t max_keypic_distance;
     int closed_gop;
+    int low_delay;
     int num_ref_pics;
     int restricted_mode;
     int chroma_qp_offset_table;
@@ -115,9 +137,13 @@ extern "C" {
     int tc_offset;
     int qp;
     int flat_lambda;
+    float lambda_a;
+    float lambda_b;
+    int leading_pictures;
     int speed_mode;
     int tune_mode;
     int checksum_mode;
+    int threads;
     uint32_t simd_mask;
     char* explicit_encoder_settings;
   } xvc_encoder_parameters;
@@ -131,6 +157,8 @@ extern "C" {
                                              *param);
     xvc_enc_return_code(*parameters_set_default)(
       xvc_encoder_parameters *param);
+    xvc_enc_return_code(*parameters_apply_rd_preset)(int preset,
+      xvc_encoder_parameters *param);
     xvc_enc_return_code(*parameters_check)(const xvc_encoder_parameters *param);
     // Reconstructed picture
     xvc_enc_pic_buffer* (*picture_create)(xvc_encoder *encoder);
@@ -143,6 +171,13 @@ extern "C" {
                                          xvc_enc_nal_unit **nal_units,
                                          int *num_nal_units,
                                          xvc_enc_pic_buffer *rec_pic);
+    xvc_enc_return_code(*encoder_encode2)(xvc_encoder *encoder,
+                                          const uint8_t *plane_bytes[3],
+                                          int plane_stride[3],
+                                          xvc_enc_nal_unit **nal_units,
+                                          int *num_nal_units,
+                                          xvc_enc_pic_buffer *rec_pic,
+                                          int64_t user_data);
     xvc_enc_return_code(*encoder_flush)(xvc_encoder *encoder,
                                         xvc_enc_nal_unit **nal_units,
                                         int *num_nal_units,
@@ -152,7 +187,7 @@ extern "C" {
   } xvc_encoder_api;
 
   // Starting point for using the xvc encoder api
-  const xvc_encoder_api* xvc_encoder_api_get(void);
+  XVC_ENC_API const xvc_encoder_api* xvc_encoder_api_get(void);
 
 #ifdef __cplusplus
 }  // extern "C"

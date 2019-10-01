@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include "xvc_dec_app/decoder_app.h"
@@ -84,10 +87,12 @@ void DecoderApp::ReadArguments(int argc, const char *argv[]) {
       std::stringstream(argv[++i]) >> cli_.output_bitdepth;
     } else if (arg == "-max-framerate") {
       std::stringstream(argv[++i]) >> cli_.max_framerate;
-    } else if (arg == "-simd-mask") {
-      std::stringstream(argv[++i]) >> cli_.simd_mask;
     } else if (arg == "-threads") {
       std::stringstream(argv[++i]) >> cli_.threads;
+    } else if (arg == "-simd-mask") {
+      std::stringstream(argv[++i]) >> cli_.simd_mask;
+    } else if (arg == "-dither") {
+      std::stringstream(argv[++i]) >> cli_.dither;
     } else if (arg == "-loop") {
       std::stringstream(argv[++i]) >> cli_.loop;
     } else if (arg == "-verbose") {
@@ -160,11 +165,14 @@ void DecoderApp::CreateAndConfigureApi() {
   if (cli_.max_framerate != -1) {
     params_->max_framerate = cli_.max_framerate;
   }
+  if (cli_.threads != -1) {
+    params_->threads = cli_.threads;
+  }
   if (cli_.simd_mask != -1) {
     params_->simd_mask = cli_.simd_mask;
   }
-  if (cli_.threads != -1) {
-    params_->threads = cli_.threads;
+  if (cli_.dither != -1) {
+    params_->dither = cli_.dither;
   }
   if (xvc_api_->parameters_check(params_) != XVC_DEC_OK) {
     std::cerr << "Error. Invalid parameters. Please check the values of the"
@@ -226,7 +234,10 @@ void DecoderApp::MainDecoderLoop() {
 
     // Decode next Nal Unit.
     ret = xvc_api_->decoder_decode_nal(decoder_, &nal_bytes_[0], nal_size, 0);
-    if (ret == XVC_DEC_BITSTREAM_VERSION_HIGHER_THAN_DECODER) {
+    if (ret == XVC_DEC_BITSTREAM_VERSION_LOWER_THAN_SUPPORTED_BY_DECODER) {
+      std::cerr << xvc_api_->xvc_dec_get_error_text(ret) << std::endl;
+      std::exit(XVC_DEC_BITSTREAM_VERSION_LOWER_THAN_SUPPORTED_BY_DECODER);
+    } else if (ret == XVC_DEC_BITSTREAM_VERSION_HIGHER_THAN_DECODER) {
       std::cerr << xvc_api_->xvc_dec_get_error_text(ret) << std::endl;
       std::exit(XVC_DEC_BITSTREAM_VERSION_HIGHER_THAN_DECODER);
     } else if (ret == XVC_DEC_BITSTREAM_BITDEPTH_TOO_HIGH) {
@@ -245,6 +256,7 @@ void DecoderApp::MainDecoderLoop() {
       if (cli_.verbose) {
         PrintPictureInfo(decoded_pic.stats);
       }
+      all_pictures_baseline_ &= (decoded_pic.stats.profile == 1);
       num_pictures_decoded_++;
     }
   }
@@ -263,6 +275,7 @@ void DecoderApp::MainDecoderLoop() {
       output_stream.write(decoded_pic.bytes, decoded_pic.size);
     }
     PrintPictureInfo(decoded_pic.stats);
+    all_pictures_baseline_ &= (decoded_pic.stats.profile == 1);
     num_pictures_decoded_++;
   }
 
@@ -306,6 +319,10 @@ int DecoderApp::CheckConformance() {
     GetLog() << std::endl;
     GetLog() << "Conformance verified." << std::endl;
     GetLog() << "The bitstream is a conforming bitstream." << std::endl;
+    if (all_pictures_baseline_) {
+      GetLog() << "The bitstream conforms to the baseline profile."
+        << std::endl;
+    }
     GetLog() << std::endl;
     return ret;
   }
@@ -328,6 +345,8 @@ void DecoderApp::PrintUsage() {
   GetLog() << "      3: 4:4:4" << std::endl;
   GetLog() << "  -output-bitdepth <int>" << std::endl;
   GetLog() << "  -max-framerate <int>" << std::endl;
+  GetLog() << "  -threads <int> default is -1 (auto-detect)" << std::endl;
+  GetLog() << "  -dither <0/1>" << std::endl;
   GetLog() << "  -loop <int>" << std::endl;
   GetLog() << "  -verbose <0/1>" << std::endl;
 }

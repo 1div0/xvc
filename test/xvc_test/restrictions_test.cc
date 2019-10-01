@@ -1,26 +1,30 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include <vector>
 
 #include "googletest/include/gtest/gtest.h"
 
-#include "xvc_test/test_helper.h"
+#include "xvc_test/decoder_helper.h"
+#include "xvc_test/encoder_helper.h"
 #include "xvc_test/yuv_helper.h"
 
 namespace {
@@ -37,12 +41,9 @@ protected:
 
   void Encode(const xvc::EncoderSettings &settings, int width, int height,
               int frames) {
-    encoder_ = CreateEncoder(settings, width, height, 8, kDefaultQp);
-    encoder_->SetInternalBitdepth(GetParam());
+    SetupEncoder(settings, width, height, GetParam(), kDefaultQp);
     encoder_->SetSubGopLength(kSubGopLength);
     encoder_->SetSegmentLength(kSubGopLength * 2 + 1);
-    encoder_->SetQp(kDefaultQp);
-    encoder_->SetResolution(width, height);
     for (int i = 0; i < frames; i++) {
       auto orig_pic = xvc_test::TestYuvPic(width, height, GetParam(), i, i);
       EncodeOneFrame(orig_pic.GetBytes(), orig_pic.GetBitdepth());
@@ -92,11 +93,14 @@ typedef RestrictionsTest RestrictionsDeathTest;
 TEST_P(RestrictionsTest, HandlesSwitchingRestrictionAtSegmentHeader) {
   xvc::EncoderSettings enc_settings1;
   enc_settings1.Initialize(xvc::SpeedMode::kSlow);
+  enc_settings1.leading_pictures = 0;
+  Encode(enc_settings1, 16, 16, kSubGopLength + 1);
+
   xvc::EncoderSettings enc_settings2;
   enc_settings2.Initialize(xvc::RestrictedMode::kModeA);
-
-  Encode(enc_settings1, 16, 16, kSubGopLength + 1);
+  enc_settings2.leading_pictures = 0;
   Encode(enc_settings2, 16, 16, kSubGopLength + 1);
+
   Decode(16, 16, kSubGopLength + 1, kSubGopLength + 1);
 }
 
@@ -104,17 +108,18 @@ TEST_P(RestrictionsTest, SupportParallelDecodeWhenRestrictionChanges) {
   const int num_iterations = 10;
   xvc::EncoderSettings enc_settings1;
   enc_settings1.Initialize(xvc::SpeedMode::kSlow);
+  Encode(enc_settings1, 16, 16, kSubGopLength + 1);
+
   xvc::EncoderSettings enc_settings2;
   enc_settings2.Initialize(xvc::RestrictedMode::kModeA);
-
-  Encode(enc_settings1, 16, 16, kSubGopLength + 1);
   Encode(enc_settings2, 16, 16, kSubGopLength + 1);
+
   DecoderHelper::Init(true);
   int decoded_pictures = 0;
   for (int iterations = 0; iterations < num_iterations; iterations++) {
     for (int i = 0; i < static_cast<int>(encoded_nal_units_.size()); i++) {
       auto &nal = encoded_nal_units_[i];
-      decoder_->DecodeNal(&nal[0], nal.size());
+      ASSERT_EQ(nal.size(), decoder_->DecodeNal(&nal[0], nal.size()));
       if (decoder_->GetDecodedPicture(&last_decoded_picture_)) {
         decoded_pictures++;
       }
@@ -129,13 +134,14 @@ TEST_P(RestrictionsTest, SupportParallelDecodeWhenRestrictionChanges) {
 TEST_P(RestrictionsDeathTest, FailsIfRestrictionFlagChangesAreNotSignaled) {
   xvc::EncoderSettings enc_settings1;
   enc_settings1.Initialize(xvc::SpeedMode::kSlow);
-  xvc::EncoderSettings enc_settings2;
-  enc_settings2.Initialize(xvc::RestrictedMode::kModeA);
-
   Encode(enc_settings1, 16, 16, kSubGopLength + 1);
   size_t nbr_of_nal_units = encoded_nal_units_.size();
+
+  xvc::EncoderSettings enc_settings2;
+  enc_settings2.Initialize(xvc::RestrictedMode::kModeA);
   Encode(enc_settings2, 16, 16, kSubGopLength + 1);
   encoded_nal_units_[nbr_of_nal_units] = encoded_nal_units_[0];
+
   ASSERT_DEATH({ Decode(16, 16, kSubGopLength + 1, kSubGopLength + 1); },
                "0");
 }

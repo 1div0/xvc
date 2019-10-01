@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include <algorithm>
@@ -21,10 +24,16 @@
 
 #include "googletest/include/gtest/gtest.h"
 
-#include "xvc_test/test_helper.h"
+#include "xvc_test/decoder_helper.h"
+#include "xvc_test/encoder_helper.h"
 #include "xvc_test/yuv_helper.h"
 
 namespace {
+
+struct TestParam {
+  bool explicit_output_format;
+  bool use_src_padding;
+};
 
 static const int kPicSize = 16;
 static const int kBitdepth = 8;
@@ -34,7 +43,7 @@ static const xvc::Sample kSample1 = 43;
 static const int kQp2 = 23;
 static const xvc::Sample kSample2 = 96;
 
-class DecoderResampleTest : public ::testing::TestWithParam<bool>,
+class DecoderResampleTest : public ::testing::TestWithParam<TestParam>,
   public ::xvc_test::EncoderHelper, public ::xvc_test::DecoderHelper {
 protected:
   void SetUp() override {
@@ -45,17 +54,20 @@ protected:
   void EncodeSegment(xvc::Sample orig_sample, int  qp, int resolution,
                      int bitdepth,
                      xvc::ChromaFormat chroma_fmt = xvc::ChromaFormat::k420) {
-    encoder_ = CreateEncoder(resolution, resolution, bitdepth, qp);
+    xvc::EncoderSettings encoder_settings = GetDefaultEncoderSettings();
+    encoder_settings.source_padding = GetParam().use_src_padding;
+    SetupEncoder(encoder_settings, resolution, resolution, bitdepth, qp);
     encoder_->SetSubGopLength(1);
     encoder_->SetSegmentLength(1);
     encoder_->SetChromaFormat(chroma_fmt);
     auto pic_bytes = CreateSampleBuffer(orig_sample, bitdepth);
-    EncodeFirstFrame(pic_bytes, bitdepth);
+    auto nals = EncodeOneFrame(pic_bytes, bitdepth);
+    ASSERT_EQ(2, nals.size());
   }
 
-  void DecodeResolution(int size_dec) {
-    ASSERT_EQ(4, encoded_nal_units_.size());
-    if (GetParam()) {
+  void DecodeResolution(int size_dec, int expected_segments = 2) {
+    ASSERT_EQ(expected_segments * 2, encoded_nal_units_.size());
+    if (GetParam().explicit_output_format) {
       decoder_->SetOutputWidth(size_dec);
       decoder_->SetOutputHeight(size_dec);
     }
@@ -66,18 +78,19 @@ protected:
     EXPECT_EQ(size_dec, dec_pic->stats.height);
     EXPECT_EQ(kBitdepth, dec_pic->stats.bitdepth);
     EXPECT_TRUE(VerifyDecodedLumaEquals(*dec_pic, kSample1));
-
-    DecodeSegmentHeaderSuccess(GetNextNalToDecode());
-    dec_pic = DecodeAndFlush(GetNextNalToDecode());
-    EXPECT_EQ(size_dec, dec_pic->stats.width);
-    EXPECT_EQ(size_dec, dec_pic->stats.height);
-    EXPECT_EQ(kBitdepth, dec_pic->stats.bitdepth);
-    EXPECT_TRUE(VerifyDecodedLumaEquals(*dec_pic, kSample2));
+    if (expected_segments > 1) {
+      DecodeSegmentHeaderSuccess(GetNextNalToDecode());
+      dec_pic = DecodeAndFlush(GetNextNalToDecode());
+      EXPECT_EQ(size_dec, dec_pic->stats.width);
+      EXPECT_EQ(size_dec, dec_pic->stats.height);
+      EXPECT_EQ(kBitdepth, dec_pic->stats.bitdepth);
+      EXPECT_TRUE(VerifyDecodedLumaEquals(*dec_pic, kSample2));
+    }
   }
 
   void DecodeChromaFormat(xvc_dec_chroma_format chroma_fmt_dec) {
     ASSERT_EQ(4, encoded_nal_units_.size());
-    if (GetParam()) {
+    if (GetParam().explicit_output_format) {
       decoder_->SetOutputChromaFormat(chroma_fmt_dec);
     }
 
@@ -99,7 +112,7 @@ protected:
   void DecodeBitdepth(int size_dec, int bitdepth_enc1, int bitdepth_enc2,
                       int bitdepth_dec) {
     ASSERT_EQ(4, encoded_nal_units_.size());
-    if (GetParam()) {
+    if (GetParam().explicit_output_format) {
       decoder_->SetOutputBitdepth(bitdepth_dec);
     }
 
@@ -141,16 +154,45 @@ protected:
   }
 };
 
-TEST_P(DecoderResampleTest, DownscalingImplicit) {
+TEST_P(DecoderResampleTest, OddResolution) {
+  EncodeSegment(kSample1, kQp1, 12, kBitdepth);
+  DecodeResolution(12, 1);
+}
+
+TEST_P(DecoderResampleTest, Downscaling) {
   EncodeSegment(kSample1, kQp1, 16, kBitdepth);
   EncodeSegment(kSample2, kQp2, 24, kBitdepth);
   DecodeResolution(16);
 }
 
-TEST_P(DecoderResampleTest, UpscalingImplicit) {
+TEST_P(DecoderResampleTest, DownscalingOdd1) {
+  EncodeSegment(kSample1, kQp1, 12, kBitdepth);
+  EncodeSegment(kSample2, kQp2, 24, kBitdepth);
+  DecodeResolution(12);
+}
+
+TEST_P(DecoderResampleTest, DownscalingOdd2) {
+  EncodeSegment(kSample1, kQp1, 16, kBitdepth);
+  EncodeSegment(kSample2, kQp2, 22, kBitdepth);
+  DecodeResolution(16);
+}
+
+TEST_P(DecoderResampleTest, DownscalingOddBoth) {
+  EncodeSegment(kSample1, kQp1, 10, kBitdepth);
+  EncodeSegment(kSample2, kQp2, 20, kBitdepth);
+  DecodeResolution(10);
+}
+
+TEST_P(DecoderResampleTest, Upscaling) {
   EncodeSegment(kSample1, kQp1, 24, kBitdepth);
   EncodeSegment(kSample2, kQp2, 16, kBitdepth);
   DecodeResolution(24);
+}
+
+TEST_P(DecoderResampleTest, UpscalingOddBoth) {
+  EncodeSegment(kSample1, kQp1, 20, kBitdepth);
+  EncodeSegment(kSample2, kQp2, 14, kBitdepth);
+  DecodeResolution(20);
 }
 
 TEST_P(DecoderResampleTest, Chroma420ToMono) {
@@ -217,7 +259,10 @@ TEST_P(DecoderResampleTest, BitdepthDownConversionHighToHigh) {
 }
 #endif
 
-INSTANTIATE_TEST_CASE_P(ExplicitOutput, DecoderResampleTest,
-                        ::testing::Values(false, true));
+INSTANTIATE_TEST_CASE_P(TestParam, DecoderResampleTest,
+                        ::testing::Values(TestParam({ false, false }),
+                                          TestParam({ true, false }),
+                                          TestParam({ false, true }),
+                                          TestParam({ true, true })));
 
 }   // namespace

@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #ifndef XVC_COMMON_LIB_CHECKSUM_H_
@@ -43,18 +46,16 @@ public:
   static const Method kDefaultMethod = Method::kMd5;
   static const Method kFallbackMethod = Method::kCrc;
 
-  Checksum() = default;
-  explicit Checksum(const std::vector<uint8_t> &hash)
-    : hash_(hash) {}
-
-  void Clear() { hash_.clear(); }
-  void HashPicture(const YuvPicture &pic, Method method, Mode mode);
+  Checksum(Method method, Mode mode) : method_(method), mode_(mode) {}
+  void HashPicture(const YuvPicture &pic);
   std::vector<uint8_t> GetHash() const { return hash_; }
 
 private:
   void CalculateCrc(const YuvPicture &pic, Mode mode);
   void CalculateMd5(const YuvPicture &pic, Mode mode);
 
+  const Method method_;
+  const Mode mode_;
   std::vector<uint8_t> hash_;
 };
 

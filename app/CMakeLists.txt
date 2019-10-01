@@ -16,6 +16,15 @@ set(XVC_ENC_APP_SOURCES
     "xvc_enc_app/y4m_reader.cc"
     "xvc_enc_app/y4m_reader.h")
 
+if(ENABLE_ASSERTIONS)
+  add_definitions(-UNDEBUG)
+  string(REGEX REPLACE "(^| )[/-]D *NDEBUG($| )" " " CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+endif()
+
+if(BUILD_SHARED_LIBS)
+  add_definitions(-DXVC_SHARED_LIB)
+endif()
+
 if(MSVC)
   set(cxx_flags /GS /W3 /WX /Za /EHsc)
 elseif(CMAKE_COMPILER_IS_GNUCXX)
@@ -41,5 +50,4 @@ target_compile_options(xvc_dec_app PRIVATE ${cxx_flags})
 target_include_directories(xvc_dec_app PUBLIC . ../src)
 target_link_libraries(xvc_dec_app LINK_PUBLIC xvc_dec_lib)
 
-install(TARGETS xvc_enc_app xvc_dec_app DESTINATION "${CMAKE_INSTALL_PREFIX}/bin")
-
+install(TARGETS xvc_enc_app xvc_dec_app DESTINATION "${CMAKE_INSTALL_BINDIR}")

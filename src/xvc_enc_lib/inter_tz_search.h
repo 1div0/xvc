@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #ifndef XVC_ENC_LIB_INTER_TZ_SEARCH_H_
@@ -30,22 +33,20 @@ namespace xvc {
 
 class TzSearch {
 public:
-  TzSearch(int bitdepth, const YuvPicture &orig_pic,
-           const InterPrediction &inter_pred,
+  TzSearch(const YuvPicture &orig_pic, const InterPrediction &inter_pred,
            const EncoderSettings &encoder_settings, int search_range)
     : orig_pic_(orig_pic),
     inter_pred_(inter_pred),
     encoder_settings_(encoder_settings),
-    bitdepth_(bitdepth),
     search_range_(search_range) {
   }
-  MotionVector Search(const CodingUnit &cu, const Qp &qp, MetricType metric,
-                      const MotionVector &mvp, const YuvPicture &ref_pic,
-                      const MotionVector &mv_min, const MotionVector &mv_max,
-                      const MotionVector &prev_search);
+  MvFullpel Search(const CodingUnit &cu, const Qp &qp,
+                   const SampleMetric &metric, const MotionVector &mvp,
+                   const YuvPicture &ref_pic, const MvFullpel &mv_min,
+                   const MvFullpel &mv_max, const MvFullpel &prev_search);
 
 private:
-  using const_mv = const MotionVector;
+  using const_mv = const MvFullpel;
   struct Left { static const int index = -1; };
   struct Right { static const int index = 1; };
   struct Up { static const int index = -3; };
@@ -53,10 +54,9 @@ private:
   struct SearchState;
   template<typename TOrig> class DistortionWrapper;
 
-  bool FullpelDiamondSearch(SearchState *state, const MotionVector &mv_base,
+  bool FullpelDiamondSearch(SearchState *state, const MvFullpel &mv_base,
                             int range);
   void FullpelNeighborPointSearch(SearchState *state);
-  Distortion GetCost(SearchState *state, int mv_x, int mv_y);
   bool CheckCostBest(SearchState *state, int mv_x, int mv_y);
   template<class Dir>
   bool CheckCost1(SearchState *state, int mv_x, int mv_y, int range);
@@ -68,7 +68,6 @@ private:
   const YuvPicture &orig_pic_;
   const InterPrediction &inter_pred_;
   const EncoderSettings &encoder_settings_;
-  int bitdepth_;
   int search_range_;
 };
 

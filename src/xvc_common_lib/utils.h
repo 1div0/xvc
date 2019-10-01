@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #ifndef XVC_COMMON_LIB_UTILS_H_
@@ -36,6 +39,10 @@ constexpr bool IsFirstChroma(YuvComponent comp) {
   return comp == YuvComponent::kU;
 }
 
+constexpr int CompToPlane(YuvComponent comp) {
+  return IsLuma(comp) ? 0 : 1;
+}
+
 template <typename T, typename U>
 static T Clip3(U value, T min, T max) {
   return static_cast<T>(std::min(std::max(value, static_cast<U>(min)),
@@ -51,6 +58,7 @@ static Sample ClipBD(T value, Sample max) {
 
 int SizeToLog2(int size);
 int SizeLog2Bits(int size);
+int Log2Floor(int x);
 
 int GetChromaShiftX(ChromaFormat chroma_format);
 int GetChromaShiftY(ChromaFormat chroma_format);

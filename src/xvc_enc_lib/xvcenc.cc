@@ -1,28 +1,30 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include "xvc_enc_lib/xvcenc.h"
 
-#include <algorithm>
-#include <cstring>
+#include <cmath>
 #include <limits>
-#include <sstream>
 #include <string>
+#include <vector>
 
 #include "xvc_common_lib/common.h"
 #include "xvc_enc_lib/encoder.h"
@@ -31,6 +33,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+  static const int kDefaultSubGopLength = 16;
 
   static xvc_encoder_parameters* xvc_enc_parameters_create() {
     xvc_encoder_parameters *parameters = new xvc_encoder_parameters;
@@ -59,6 +63,7 @@ extern "C" {
     param->sub_gop_length = 0;  // determined in xvc_enc_encoder_create
     param->max_keypic_distance = 640;
     param->closed_gop = 0;
+    param->low_delay = 0;
     param->num_ref_pics = -1;  // determined in xvc_enc_set_encoder_settings
     param->restricted_mode = 0;
     param->checksum_mode = 0;
@@ -71,10 +76,49 @@ extern "C" {
     param->tc_offset = 0;
     param->qp = 32;
     param->flat_lambda = 0;
+    param->lambda_a = 0;
+    param->lambda_b = 0;
+    param->leading_pictures = 0;
     param->speed_mode = -1;  // determined in xvc_enc_encoder_create
     param->tune_mode = 0;
+    param->threads = 0;
     param->simd_mask = static_cast<uint32_t>(-1);
     param->explicit_encoder_settings = nullptr;
+    return XVC_ENC_OK;
+  }
+
+  static xvc_enc_return_code
+    xvc_enc_parameters_apply_rd_preset(int preset,
+                                       xvc_encoder_parameters *param) {
+    if (!param) {
+      return XVC_ENC_INVALID_ARGUMENT;
+    }
+    switch (preset) {
+      case 0:
+        // default
+        param->flat_lambda = 0;
+        param->leading_pictures = 0;
+        break;
+
+      case 1:
+        param->leading_pictures = 1;
+        break;
+
+      case 2:
+        param->flat_lambda = param->sub_gop_length > 0 ?
+          param->sub_gop_length : kDefaultSubGopLength;
+        break;
+
+      case 3:
+        // Lower qp with fixed offset (low motion bias)
+        param->leading_pictures = 1;
+        param->lambda_a = pow(2.0f, -5 / 3.0f);
+        param->lambda_b = 1.0f / 22;
+        break;
+
+      default:
+        return XVC_ENC_NO_SUCH_PRESET;
+    }
     return XVC_ENC_OK;
   }
 
@@ -121,6 +165,9 @@ extern "C" {
     if (param->closed_gop < 0) {
       return XVC_ENC_INVALID_PARAMETER;
     }
+    if (param->low_delay < 0 || param->low_delay > 1) {
+      return XVC_ENC_INVALID_PARAMETER;
+    }
     if (param->num_ref_pics > xvc::constants::kMaxNumRefPics) {
       return XVC_ENC_TOO_MANY_REF_PICS;
     }
@@ -135,6 +182,9 @@ extern "C" {
         param->checksum_mode >=
         static_cast<int>(xvc::Checksum::Mode::kTotalNumber)) {
       return XVC_ENC_INVALID_PARAMETER;
+    }
+    if (param->deblock < 0 || param->deblock > 2) {
+      return XVC_ENC_DEBLOCKING_SETTINGS_INVALID;
     }
     if (param->deblock == 0 &&
       (param->beta_offset || param->tc_offset)) {
@@ -151,7 +201,9 @@ extern "C" {
         param->qp < xvc::constants::kMinAllowedQp) {
       return XVC_ENC_QP_OUT_OF_RANGE;
     }
-    if (param->flat_lambda < 0 || param->flat_lambda > 1) {
+    if (param->flat_lambda < 0 ||
+        param->flat_lambda >
+        static_cast<int>(xvc::constants::kMaxSubGopLength)) {
       return XVC_ENC_INVALID_PARAMETER;
     }
     if (param->speed_mode < -1 ||
@@ -180,57 +232,34 @@ extern "C" {
     xvc_enc_set_encoder_settings(xvc::Encoder *encoder,
                                  const xvc_encoder_parameters *param) {
     xvc::EncoderSettings encoder_settings;
-
     if (param->speed_mode >= 0) {
       // If speed mode has been set explictly
       encoder_settings.Initialize(xvc::SpeedMode(param->speed_mode));
-    } else if (param->restricted_mode) {
-      // If restricted mode has been set explictly
-      encoder_settings.Initialize(xvc::RestrictedMode(param->restricted_mode));
     } else {
       encoder_settings.Initialize(xvc::SpeedMode::kSlow);
+    }
+    if (param->restricted_mode) {
+      // If restricted mode has been set explictly
+      encoder_settings.Initialize(xvc::RestrictedMode(param->restricted_mode));
     }
 
     if (param->tune_mode > 0) {
       encoder_settings.Tune(xvc::TuneMode(param->tune_mode));
     }
 
+    encoder_settings.leading_pictures = param->leading_pictures;
+    encoder_settings.flat_lambda = param->flat_lambda;
+    if (param->lambda_a != 0) {
+      encoder_settings.lambda_scale_a = param->lambda_a;
+    }
+    if (param->lambda_b != 0) {
+      encoder_settings.lambda_scale_b = param->lambda_b;
+    }
+
     // Explicit speed settings override the settings
     if (param->explicit_encoder_settings) {
-      std::string expl_values(param->explicit_encoder_settings);
-      std::string setting;
-      std::stringstream stream(expl_values);
-      while (stream >> setting) {
-        if (setting == "fast_intra_mode_eval_level") {
-          stream >> encoder_settings.fast_intra_mode_eval_level;
-        } else if (setting == "fast_merge_eval") {
-          stream >> encoder_settings.fast_merge_eval;
-        } else if (setting == "bipred_refinement_iterations") {
-          stream >> encoder_settings.bipred_refinement_iterations;
-        } else if (setting == "always_evaluate_intra_in_inter") {
-          stream >> encoder_settings.always_evaluate_intra_in_inter;
-        } else if (setting == "default_num_ref_pics") {
-          stream >> encoder_settings.default_num_ref_pics;
-        } else if (setting == "max_binary_split_depth") {
-          stream >> encoder_settings.max_binary_split_depth;
-        } else if (setting == "fast_quad_split_based_on_binary_split") {
-          stream >> encoder_settings.fast_quad_split_based_on_binary_split;
-        } else if (setting == "eval_prev_mv_search_result") {
-          stream >> encoder_settings.eval_prev_mv_search_result;
-        } else if (setting == "fast_inter_pred_bits") {
-          stream >> encoder_settings.fast_inter_pred_bits;
-        } else if (setting == "smooth_lambda_scaling") {
-          stream >> encoder_settings.smooth_lambda_scaling;
-        } else if (setting == "adaptive_qp") {
-          stream >> encoder_settings.adaptive_qp;
-        } else if (setting == "aqp_strength") {
-          stream >> encoder_settings.aqp_strength;
-        } else if (setting == "structural_ssd") {
-          stream >> encoder_settings.structural_ssd;
-        } else if (setting == "encapsulation_mode") {
-          stream >> encoder_settings.encapsulation_mode;
-        }
-      }
+      std::string explicit_settings(param->explicit_encoder_settings);
+      encoder_settings.ParseExplicitSettings(explicit_settings);
     }
 
     encoder->SetEncoderSettings(std::move(encoder_settings));
@@ -264,7 +293,8 @@ extern "C" {
     if (xvc_enc_parameters_check(param) != XVC_ENC_OK) {
       return nullptr;
     }
-    xvc::Encoder *encoder = new xvc::Encoder();
+    xvc::Encoder *encoder = new xvc::Encoder(param->internal_bitdepth,
+                                             param->threads);
     xvc_enc_set_encoder_settings(encoder, param);
 
     encoder->SetCpuCapabilities(xvc::SimdCpu::GetMaskedCaps(param->simd_mask));
@@ -272,7 +302,6 @@ extern "C" {
     encoder->SetChromaFormat(xvc::ChromaFormat(param->chroma_format));
     encoder->SetColorMatrix(xvc::ColorMatrix(param->color_matrix));
     encoder->SetInputBitdepth(param->input_bitdepth);
-    encoder->SetInternalBitdepth(param->internal_bitdepth);
     encoder->SetFramerate(param->framerate);
     if (param->chroma_qp_offset_table >= 0) {
       encoder->SetChromaQpOffsetTable(param->chroma_qp_offset_table);
@@ -285,22 +314,37 @@ extern "C" {
     }
     encoder->SetBetaOffset(param->beta_offset);
     encoder->SetTcOffset(param->tc_offset);
-    if (param->beta_offset != 0 || param->tc_offset != 0) {
-      encoder->SetDeblock(3);
+    if (param->deblock == 1 &&
+      (param->beta_offset != 0 || param->tc_offset != 0)) {
+      encoder->SetDeblockingMode(xvc::DeblockingMode::kCustom);
     } else {
-      encoder->SetDeblock(param->deblock);
+      switch (param->deblock) {
+        case 0:
+          encoder->SetDeblockingMode(xvc::DeblockingMode::kDisabled);
+          break;
+        case 1:
+          encoder->SetDeblockingMode(xvc::DeblockingMode::kEnabled);
+          break;
+        case 2:
+          encoder->SetDeblockingMode(xvc::DeblockingMode::kPerPicture);
+          break;
+        default:
+          assert(0);
+      }
     }
     encoder->SetQp(param->qp);
+    encoder->SetLowDelay(param->low_delay != 0);
     if (param->num_ref_pics >= 0) {
       encoder->SetNumRefPics(param->num_ref_pics);
+    } else if (param->low_delay != 0) {
+      encoder->SetNumRefPics(4);
     }
-    encoder->SetFlatLambda(param->flat_lambda != 0);
     encoder->SetChecksumMode(
       static_cast<xvc::Checksum::Mode>(param->checksum_mode));
 
     int sub_gop_length = param->sub_gop_length;
     if (sub_gop_length == 0) {
-      sub_gop_length = encoder->GetNumRefPics() > 0 ? 16 : 1;
+      sub_gop_length = encoder->GetNumRefPics() > 0 ? kDefaultSubGopLength : 1;
     }
     encoder->SetSubGopLength(sub_gop_length);
     xvc_enc_set_segment_length(encoder, param, sub_gop_length);
@@ -324,13 +368,42 @@ extern "C" {
       return XVC_ENC_INVALID_ARGUMENT;
     }
     xvc::Encoder *lib_encoder = reinterpret_cast<xvc::Encoder*>(encoder);
-    xvc_enc_pic_buffer rec_pic_buffer;
-    *num_nal_units = lib_encoder->Encode(input_picture, nal_units,
-      (rec_pic != nullptr), &rec_pic_buffer);
-    if (rec_pic) {
-      *rec_pic = rec_pic_buffer;
+    bool success = lib_encoder->Encode(input_picture, rec_pic);
+    std::vector<xvc_enc_nal_unit> &output_nals = lib_encoder->GetOutputNals();
+    if (output_nals.size() > 0) {
+      *nal_units = &output_nals[0];
+      *num_nal_units = static_cast<int>(output_nals.size());
+    } else {
+      *nal_units = nullptr;
+      *num_nal_units = 0;
     }
-    return XVC_ENC_OK;
+    return success ? XVC_ENC_OK : XVC_ENC_INVALID_ARGUMENT;
+  }
+
+  static xvc_enc_return_code
+    xvc_enc_encoder_encode2(xvc_encoder *encoder, const uint8_t *plane_bytes[3],
+                            int plane_stride[3], xvc_enc_nal_unit **nal_units,
+                            int *num_nal_units, xvc_enc_pic_buffer *rec_pic,
+                            int64_t user_data) {
+    if (!encoder || !plane_bytes || !nal_units || !num_nal_units) {
+      return XVC_ENC_INVALID_ARGUMENT;
+    }
+    xvc::Encoder::PicPlanes pic_planes = {
+      std::make_pair(plane_bytes[0], plane_stride[0]),
+      std::make_pair(plane_bytes[1], plane_stride[1]),
+      std::make_pair(plane_bytes[2], plane_stride[2])
+    };
+    xvc::Encoder *lib_encoder = reinterpret_cast<xvc::Encoder*>(encoder);
+    bool success = lib_encoder->Encode(pic_planes, rec_pic, user_data);
+    std::vector<xvc_enc_nal_unit> &output_nals = lib_encoder->GetOutputNals();
+    if (output_nals.size() > 0) {
+      *nal_units = &output_nals[0];
+      *num_nal_units = static_cast<int>(output_nals.size());
+    } else {
+      *nal_units = nullptr;
+      *num_nal_units = 0;
+    }
+    return success ? XVC_ENC_OK : XVC_ENC_INVALID_ARGUMENT;
   }
 
   static xvc_enc_return_code
@@ -340,13 +413,16 @@ extern "C" {
       return XVC_ENC_INVALID_ARGUMENT;
     }
     xvc::Encoder *lib_encoder = reinterpret_cast<xvc::Encoder*>(encoder);
-    xvc_enc_pic_buffer rec_pic_buffer;
-    *num_nal_units = lib_encoder->Flush(nal_units, (rec_pic != nullptr),
-                                        &rec_pic_buffer);
-    if (rec_pic) {
-      *rec_pic = rec_pic_buffer;
+    bool success = lib_encoder->Flush(rec_pic);
+    std::vector<xvc_enc_nal_unit> &output_nals = lib_encoder->GetOutputNals();
+    if (output_nals.size() > 0) {
+      *nal_units = &output_nals[0];
+      *num_nal_units = static_cast<int>(output_nals.size());
+    } else {
+      *nal_units = nullptr;
+      *num_nal_units = 0;
     }
-    return XVC_ENC_OK;
+    return success ? XVC_ENC_OK : XVC_ENC_NO_MORE_OUTPUT;
   }
 
   static const char* xvc_enc_get_error_text(xvc_enc_return_code error_code) {
@@ -386,6 +462,8 @@ extern "C" {
       case XVC_ENC_INVALID_PARAMETER:
         return  "Error. Invalid parameter. Please check the encoder"
           " parameters.";
+      case XVC_ENC_NO_SUCH_PRESET:
+        return "No such multi-pass preset configuration exists";
       default:
         return "Unkown error";
     }
@@ -395,12 +473,14 @@ extern "C" {
     &xvc_enc_parameters_create,
     &xvc_enc_parameters_destroy,
     &xvc_enc_parameters_set_default,
+    &xvc_enc_parameters_apply_rd_preset,
     &xvc_enc_parameters_check,
     &xvc_enc_picture_create,
     &xvc_enc_picture_destroy,
     &xvc_enc_encoder_create,
     &xvc_enc_encoder_destroy,
     &xvc_enc_encoder_encode,
+    &xvc_enc_encoder_encode2,
     &xvc_enc_encoder_flush,
     &xvc_enc_get_error_text,
   };

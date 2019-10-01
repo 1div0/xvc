@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include "xvc_dec_lib/thread_decoder.h"
@@ -52,6 +55,7 @@ void ThreadDecoder::StopAll() {
 
 void ThreadDecoder::DecodeAsync(
   std::shared_ptr<SegmentHeader> &&segment_header,
+  std::shared_ptr<SegmentHeader> &&prev_segment_header,
   std::shared_ptr<PictureDecoder> &&pic_dec,
   std::vector<std::shared_ptr<const PictureDecoder>> &&deps,
   std::unique_ptr<std::vector<uint8_t>> &&nal, size_t nal_offset) {
@@ -60,6 +64,7 @@ void ThreadDecoder::DecodeAsync(
   work.pic_dec = std::move(pic_dec);
   work.inter_dependencies = std::move(deps);
   work.segment_header = std::move(segment_header);
+  work.prev_segment_header = std::move(prev_segment_header);
   work.nal_offset = nal_offset;
   work.nal = std::move(nal);
 
@@ -145,15 +150,23 @@ void ThreadDecoder::WorkerMain() {
     // Decode picture
     BitReader bit_reader(&(*work.nal)[0] + work.nal_offset,
                          work.nal->size() - work.nal_offset);
-    work.success = work.pic_dec->Decode(*work.segment_header, &bit_reader);
+    work.success = work.pic_dec->Decode(*work.segment_header,
+                                        *work.prev_segment_header, &bit_reader,
+                                        false);
+    work.pic_dec->SetOutputStatus(OutputStatus::kPostProcessing);
 
-    lock.lock();
-    // Mark the picture as fully processed, this unlocks dependencies for
-    // other work items without any roundtrip to main thread
-    work.pic_dec->SetOutputStatus(OutputStatus::kFinishedProcessing);
     // Notify all workers that a dependency might be ready
+    lock.lock();
     wait_work_cond_.notify_all();
-    // Notify main thread picture is done
+    lock.unlock();
+
+    // Verify checksum and prepare output picture
+    work.success &=
+      work.pic_dec->Postprocess(*work.segment_header, &bit_reader);
+    work.pic_dec->SetOutputStatus(OutputStatus::kFinishedProcessing);
+
+    // Notify main thread picture that picture is fully decoded
+    lock.lock();
     // TODO(PH) some fields are not needed anymore (like nal)
     finished_work_.push_back(std::move(work));
     work_done_cond_.notify_all();

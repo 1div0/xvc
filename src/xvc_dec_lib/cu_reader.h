@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #ifndef XVC_DEC_LIB_CU_READER_H_
@@ -27,10 +30,7 @@ namespace xvc {
 
 class CuReader {
 public:
-  CuReader(PictureData *pic_data, const IntraPrediction &intra_pred)
-    : pic_data_(pic_data),
-    intra_pred_(intra_pred) {
-  }
+  CuReader(PictureData *pic_data, const IntraPrediction &intra_pred);
   bool ReadCtu(CodingUnit *cu, SyntaxReader *reader) {
     ctu_has_coeffs_ = false;
     ReadCu(cu, SplitRestriction::kNone, reader);
@@ -47,9 +47,16 @@ private:
                            SyntaxReader *reader);
   void ReadInterPrediction(CodingUnit *cu, YuvComponent comp,
                            SyntaxReader *reader);
-  void ReadCoefficients(CodingUnit *cu, YuvComponent comp,
+  void ReadMergePrediction(CodingUnit *cu, YuvComponent comp,
+                           SyntaxReader *reader);
+  void ReadResidualData(CodingUnit *cu, YuvComponent comp,
                         SyntaxReader *reader);
+  void ReadResidualDataInternal(CodingUnit *cu, YuvComponent comp,
+                                SyntaxReader *reader) const;
+  bool ReadCbfInvariant(CodingUnit *cu, YuvComponent comp,
+                        SyntaxReader *reader) const;
 
+  const Restrictions &restrictions_;
   PictureData *pic_data_;
   const IntraPrediction &intra_pred_;
   bool ctu_has_coeffs_ = false;

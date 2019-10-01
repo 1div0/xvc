@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include "xvc_common_lib/deblocking_filter.h"
@@ -41,11 +44,20 @@ static const std::array<uint8_t, constants::kMaxAllowedQp + 1> kBetaTable = {
   86, 88,
 };
 
+DeblockingFilter::DeblockingFilter(PictureData *pic_data, YuvPicture *rec_pic,
+                 int beta_offset, int tc_offset)
+  : restrictions_(Restrictions::Get()),
+  pic_data_(pic_data),
+  rec_pic_(rec_pic),
+  beta_offset_(beta_offset),
+  tc_offset_(tc_offset) {
+}
+
 void DeblockingFilter::DeblockPicture() {
   bool has_secondary_tree = pic_data_->HasSecondaryCuTree();
   int num_ctus = pic_data_->GetNumberOfCtu();
   int subblock_size = kSubblockSizeExt;
-  if (Restrictions::Get().disable_ext_deblock_subblock_size_4) {
+  if (restrictions_.disable_ext_deblock_subblock_size_4) {
     subblock_size = kSubblockSize;
   }
   for (int rsaddr = 0; rsaddr < num_ctus; rsaddr++) {
@@ -76,7 +88,7 @@ void DeblockingFilter::DeblockCtu(int rsaddr, CuTree cu_tree, Direction dir,
   const bool deblock_luma = cu_tree == CuTree::Primary;
   const bool deblock_chroma = pic_data_->GetMaxNumComponents() > 1 &&
     (!pic_data_->HasSecondaryCuTree() || cu_tree == CuTree::Secondary) &&
-    !Restrictions::Get().disable_deblock_chroma_filter;
+    !restrictions_.disable_deblock_chroma_filter;
 
   for (int dy = 0; dy < constants::kMaxBlockSize; dy += subblock_size) {
     for (int dx = 0; dx < constants::kMaxBlockSize; dx += subblock_size) {
@@ -102,13 +114,13 @@ void DeblockingFilter::DeblockCtu(int rsaddr, CuTree cu_tree, Direction dir,
       }
 
       // Derive boundary strength.
-      int boundary_strength = GetBoundaryStrength(*cu_p, *cu_q);
+      int boundary_strength = GetBoundaryStrength(*cu_p, *cu_q, x, y, dir);
       if (!boundary_strength) {
         continue;
       }
 
       int qp = (cu_p->GetQp(luma) + cu_q->GetQp(luma) + 1) >> 1;
-      if (Restrictions::Get().disable_deblock_depending_on_qp) {
+      if (restrictions_.disable_deblock_depending_on_qp) {
         qp = 32;
       }
       // TODO(dev): Add check for if a PU (CU) is coded losslessly
@@ -118,7 +130,7 @@ void DeblockingFilter::DeblockCtu(int rsaddr, CuTree cu_tree, Direction dir,
 
       if (deblock_chroma && boundary_strength == 2) {
         int chroma_qp = (cu_p->GetQp(chroma) + cu_q->GetQp(chroma) + 1) >> 1;
-        if (Restrictions::Get().disable_deblock_depending_on_qp) {
+        if (restrictions_.disable_deblock_depending_on_qp) {
           chroma_qp = 31;
         }
         int chroma_x = x >> chroma_shift_x;
@@ -140,43 +152,58 @@ void DeblockingFilter::DeblockCtu(int rsaddr, CuTree cu_tree, Direction dir,
 }
 
 int DeblockingFilter::GetBoundaryStrength(const CodingUnit &cu_p,
-                                          const CodingUnit &cu_q) {
-  static const int one_integer_step = 1 << constants::kMvPrecisionShift;
+                                          const CodingUnit &cu_q,
+                                          int pos_x, int pos_y, Direction dir) {
+  static const int one_integer_step = MotionVector::kScale;
   int boundary_strength = 0;
-  if (Restrictions::Get().disable_deblock_boundary_strength_zero) {
+  if (restrictions_.disable_deblock_boundary_strength_zero) {
     boundary_strength = 1;
   }
   YuvComponent luma = YuvComponent::kY;
+
+  MvCorner corner_p;
+  MvCorner corner_q;
+  if (dir == Direction::kVertical) {
+    corner_p = (pos_y - cu_p.GetPosY(luma)) < (cu_p.GetHeight(luma) >> 1) ?
+      MvCorner::kUpRight : MvCorner::kDownRight;
+    corner_q = (pos_y - cu_q.GetPosY(luma)) < (cu_q.GetHeight(luma) >> 1) ?
+      MvCorner::kUpLeft : MvCorner::kDownLeft;
+  } else {
+    corner_p = (pos_x - cu_p.GetPosX(luma)) < (cu_p.GetWidth(luma) >> 1) ?
+      MvCorner::kDownLeft : MvCorner::kDownRight;
+    corner_q = (pos_x - cu_q.GetPosX(luma)) < (cu_q.GetWidth(luma) >> 1) ?
+      MvCorner::kUpLeft : MvCorner::kUpRight;
+  }
 
   if (cu_p.IsIntra() || cu_q.IsIntra()) {
     boundary_strength = 2;
   } else if (cu_p.GetCbf(luma) || cu_q.GetCbf(luma)) {
     boundary_strength = 1;
   } else if (pic_data_->GetPredictionType() == PicturePredictionType::kBi) {
-    PicNum refP0 = cu_p.GetRefPoc(RefPicList::kL0);
-    PicNum refP1 = cu_p.GetRefPoc(RefPicList::kL1);
-    PicNum refQ0 = cu_q.GetRefPoc(RefPicList::kL0);
-    PicNum refQ1 = cu_q.GetRefPoc(RefPicList::kL1);
-    if ((refP0 == refQ0 && refP1 == refQ1) ||
-      (refP0 == refQ1 && refP1 == refQ0)) {
-      auto &mvP0 = cu_p.GetMv(RefPicList::kL0);
-      auto &mvP1 = cu_p.GetMv(RefPicList::kL1);
-      auto &mvQ0 = cu_q.GetMv(RefPicList::kL0);
-      auto &mvQ1 = cu_q.GetMv(RefPicList::kL1);
-      auto cond1 = [&mvP0, &mvP1, &mvQ0, &mvQ1]() {
-        return (std::abs(mvP0.x - mvQ0.x) >= one_integer_step) ||
-          (std::abs(mvP0.y - mvQ0.y) >= one_integer_step) ||
-          (std::abs(mvP1.x - mvQ1.x) >= one_integer_step) ||
-          (std::abs(mvP1.y - mvQ1.y) >= one_integer_step);
+    PicNum ref_p0 = cu_p.GetRefPoc(RefPicList::kL0);
+    PicNum ref_p1 = cu_p.GetRefPoc(RefPicList::kL1);
+    PicNum ref_q0 = cu_q.GetRefPoc(RefPicList::kL0);
+    PicNum ref_q1 = cu_q.GetRefPoc(RefPicList::kL1);
+    if ((ref_p0 == ref_q0 && ref_p1 == ref_q1) ||
+      (ref_p0 == ref_q1 && ref_p1 == ref_q0)) {
+      const MotionVector &mv_p0 = cu_p.GetMv(RefPicList::kL0, corner_p);
+      const MotionVector &mv_p1 = cu_p.GetMv(RefPicList::kL1, corner_p);
+      const MotionVector &mv_q0 = cu_q.GetMv(RefPicList::kL0, corner_q);
+      const MotionVector &mv_q1 = cu_q.GetMv(RefPicList::kL1, corner_q);
+      auto cond1 = [&mv_p0, &mv_p1, &mv_q0, &mv_q1]() {
+        return (std::abs(mv_p0.x - mv_q0.x) >= one_integer_step) ||
+          (std::abs(mv_p0.y - mv_q0.y) >= one_integer_step) ||
+          (std::abs(mv_p1.x - mv_q1.x) >= one_integer_step) ||
+          (std::abs(mv_p1.y - mv_q1.y) >= one_integer_step);
       };
-      auto cond2 = [&mvP0, &mvP1, &mvQ0, &mvQ1]() {
-        return (std::abs(mvP0.x - mvQ1.x) >= one_integer_step) ||
-          (std::abs(mvP0.y - mvQ1.y) >= one_integer_step) ||
-          (std::abs(mvP1.x - mvQ0.x) >= one_integer_step) ||
-          (std::abs(mvP1.y - mvQ0.y) >= one_integer_step);
+      auto cond2 = [&mv_p0, &mv_p1, &mv_q0, &mv_q1]() {
+        return (std::abs(mv_p0.x - mv_q1.x) >= one_integer_step) ||
+          (std::abs(mv_p0.y - mv_q1.y) >= one_integer_step) ||
+          (std::abs(mv_p1.x - mv_q0.x) >= one_integer_step) ||
+          (std::abs(mv_p1.y - mv_q0.y) >= one_integer_step);
       };
-      if (refP0 != refP1) {
-        if (refP0 == refQ0) {
+      if (ref_p0 != ref_p1) {
+        if (ref_p0 == ref_q0) {
           if (cond1()) {
             boundary_strength = 1;
           }
@@ -197,15 +224,17 @@ int DeblockingFilter::GetBoundaryStrength(const CodingUnit &cu_p,
     // For uni-prediction assumes that a POC is only referenced once
     if (cu_p.GetRefIdx(RefPicList::kL0) != cu_q.GetRefIdx(RefPicList::kL0)) {
       boundary_strength = 1;
-    } else if (std::abs(cu_p.GetMv(RefPicList::kL0).x -
-                        cu_q.GetMv(RefPicList::kL0).x) >= one_integer_step ||
-               std::abs(cu_p.GetMv(RefPicList::kL0).y -
-                        cu_q.GetMv(RefPicList::kL0).y) >= one_integer_step) {
-      boundary_strength = 1;
+    } else {
+      const MotionVector &mv_p0 = cu_p.GetMv(RefPicList::kL0, corner_p);
+      const MotionVector &mv_q0 = cu_q.GetMv(RefPicList::kL0, corner_q);
+      if (std::abs(mv_p0.x - mv_q0.x) >= one_integer_step ||
+          std::abs(mv_p0.y - mv_q0.y) >= one_integer_step) {
+        boundary_strength = 1;
+      }
     }
   }
   if (boundary_strength == 1 &&
-      Restrictions::Get().disable_deblock_boundary_strength_one) {
+      restrictions_.disable_deblock_boundary_strength_one) {
     boundary_strength = 2;
   }
   return boundary_strength;
@@ -251,7 +280,7 @@ void DeblockingFilter::FilterEdgeLuma(int x, int y, Direction dir,
     int d = d0 + d3;
 
     if (d >= beta &&
-        !Restrictions::Get().disable_deblock_initial_sample_decision) {
+        !restrictions_.disable_deblock_initial_sample_decision) {
       continue;
     }
 
@@ -265,10 +294,10 @@ void DeblockingFilter::FilterEdgeLuma(int x, int y, Direction dir,
     strong_filter &=
       CheckStrongFilter(src + block_offset + step_size * 3, beta, tc, offset);
 
-    if (strong_filter && !Restrictions::Get().disable_deblock_strong_filter) {
+    if (strong_filter && !restrictions_.disable_deblock_strong_filter) {
       FilterLumaStrong(src + block_offset, step_size, offset, 2 * tc);
     } else {
-      if (Restrictions::Get().disable_deblock_weak_filter) {
+      if (restrictions_.disable_deblock_weak_filter) {
         continue;
       }
       int side_threshold = (beta + (beta >> 1)) >> 3;
@@ -309,7 +338,7 @@ void DeblockingFilter::FilterLumaWeak(Sample* src_ptr, ptrdiff_t step_size,
     int32_t delta = (9 * (q0 - p0) - 3 * (q1 - p1) + 8) >> 4;
 
     if (std::abs(delta) >= threshold &&
-        !Restrictions::Get().disable_deblock_weak_sample_decision) {
+        !restrictions_.disable_deblock_weak_sample_decision) {
       src += step_size;
       continue;
     }
@@ -318,7 +347,7 @@ void DeblockingFilter::FilterLumaWeak(Sample* src_ptr, ptrdiff_t step_size,
     src[-offset] = util::ClipBD(p0 + delta, sample_max);
     src[0] = util::ClipBD(q0 - delta, sample_max);
 
-    if (!Restrictions::Get().disable_deblock_two_samples_weak_filter) {
+    if (!restrictions_.disable_deblock_two_samples_weak_filter) {
       if (filter_p1) {
         Sample p2 = src[-offset * 3];
         int32_t delta_p1 = util::Clip3(

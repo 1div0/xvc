@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include <array>
@@ -54,7 +57,7 @@ protected:
     sh.num_ref_pics = 1;
     sh.max_binary_split_depth = xvc::constants::kMaxBinarySplitDepth;
     sh.checksum_mode = checksum_mode;
-    sh.deblock = true;
+    sh.deblocking_mode = xvc::DeblockingMode::kEnabled;
     return sh;
   }
 
@@ -66,39 +69,45 @@ protected:
     segment_ = SegmentHeaderHelper(kPicWidth, kPicHeight, internal_bitdepth,
                                    checksum_mode, xvc::ChromaFormat::k420,
                                    sub_gop_length);
+    output_pic_format_ =
+      xvc::PictureFormat(kPicWidth, kPicHeight, input_bitdepth_,
+                         segment_.chroma_format, segment_.color_matrix, false);
     input_bitdepth_ = segment_.internal_bitdepth;
     int mask = (1 << input_bitdepth_) - 1;
     for (int i = 0; i < static_cast<int>(input_pic_.size()); i++) {
       input_pic_[i] = i & mask;  // random yuv file
     }
-    xvc::SimdFunctions simd(xvc::SimdCpu::GetRuntimeCapabilities());
+    xvc::PictureFormat internal_pic_format = segment_.GetInternalPicFormat();
+    std::set<xvc::CpuCapability> caps = xvc::SimdCpu::GetRuntimeCapabilities();
+    simd_.reset(new xvc::EncoderSimdFunctions(caps, internal_bitdepth));
     pic_encoder_ =
-      std::make_shared<xvc::PictureEncoder>(simd, segment_.chroma_format,
-                                            segment_.GetInternalWidth(),
-                                            segment_.GetInternalHeight(),
-                                            segment_.internal_bitdepth);
+      std::make_shared<xvc::PictureEncoder>(*simd_, internal_pic_format,
+                                            segment_.GetCropWidth(),
+                                            segment_.GetCropHeight());
     pic_decoder_ =
-      std::make_shared<xvc::PictureDecoder>(simd, segment_.chroma_format,
-                                            segment_.GetInternalWidth(),
-                                            segment_.GetInternalHeight(),
-                                            segment_.internal_bitdepth);
+      std::make_shared<xvc::PictureDecoder>(*simd_, internal_pic_format,
+                                            segment_.GetCropWidth(),
+                                            segment_.GetCropHeight());
   }
 
-  std::vector<uint8_t>* EncodePicture(xvc::Sample *orig) {
+  const std::vector<uint8_t>* EncodePicture(const xvc::Sample *orig) {
     int buffer_flag = 0;
-    bool flat_lamda = false;
     pic_encoder_->GetPicData()->SetNalType(xvc::NalUnitType::kIntraPicture);
     pic_encoder_->GetPicData()->SetPoc(0);
     pic_encoder_->GetPicData()->SetDoc(0);
     pic_encoder_->GetPicData()->SetTid(0);
-    pic_encoder_->GetOrigPic()->CopyFrom(reinterpret_cast<uint8_t*>(orig),
-                                         input_bitdepth_);
+    xvc::Resampler resampler(simd_->resampler);
+    xvc::PictureFormat input_format(kPicWidth, kPicHeight, input_bitdepth_,
+                                    segment_.chroma_format,
+                                    segment_.color_matrix, false);
+    resampler.ConvertFrom(input_format, reinterpret_cast<const uint8_t*>(orig),
+                          pic_encoder_->GetOrigPic().get());
+
     xvc::EncoderSettings encoder_settings;
     encoder_settings.Initialize(xvc::SpeedMode::kSlow);
     encoder_settings.Tune(xvc::TuneMode::kPsnr);
-    return pic_encoder_->Encode(segment_, segment_qp_,
-                                segment_.max_sub_gop_length, buffer_flag,
-                                flat_lamda, encoder_settings);
+    return pic_encoder_->Encode(segment_, segment_qp_, buffer_flag,
+                                encoder_settings);
   }
 
   bool DecodePicture(const std::vector<uint8_t> &bitstream) {
@@ -109,14 +118,15 @@ protected:
     xvc::BitReader bit_reader(&bitstream[0], bitstream.size());
     pic_decoder_->SetOutputStatus(xvc::OutputStatus::kHasBeenOutput);
     auto pic_header =
-      pic_decoder_->DecodeHeader(&bit_reader, &sub_gop_end_poc,
+      pic_decoder_->DecodeHeader(segment_, &bit_reader, &sub_gop_end_poc,
                                  &sub_gop_start_poc, &sub_gop_length,
-                                 sub_gop_length, sub_gop_length, doc,
-                                 segment_.soc, num_buffered_nals);
+                                 sub_gop_length, doc, segment_.soc,
+                                 num_buffered_nals);
     // TODO(PH) Also verify inter pictures?
     xvc::ReferencePictureLists ref_pic_list;
-    pic_decoder_->Init(segment_, pic_header, std::move(ref_pic_list), 0);
-    return pic_decoder_->Decode(segment_, &bit_reader);
+    pic_decoder_->Init(segment_, pic_header, std::move(ref_pic_list),
+                       output_pic_format_, 0);
+    return pic_decoder_->Decode(segment_, segment_, &bit_reader, true);
   }
 
   static const int kPicWidth = 16;
@@ -124,7 +134,9 @@ protected:
   static const int segment_qp_ = 27;
   int input_bitdepth_ = 8;
   xvc::SegmentHeader segment_;
+  xvc::PictureFormat output_pic_format_;
   std::array<xvc::Sample, kPicWidth * kPicHeight * 3> input_pic_;
+  std::unique_ptr<xvc::EncoderSimdFunctions> simd_;
   std::shared_ptr<xvc::PictureEncoder> pic_encoder_;
   std::shared_ptr<xvc::PictureDecoder> pic_decoder_;
 };

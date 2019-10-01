@@ -1,19 +1,22 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include "googletest/include/gtest/gtest.h"
@@ -103,7 +106,7 @@ TEST(DecoderAPI, DecoderGetDecodedPic) {
   EXPECT_EQ(XVC_DEC_OK, api->parameters_destroy(params));
   EXPECT_EQ(XVC_DEC_INVALID_ARGUMENT, api->decoder_get_picture(decoder,
                                                                nullptr));
-  EXPECT_EQ(XVC_DEC_NO_SEGMENT_HEADER_DECODED,
+  EXPECT_EQ(XVC_DEC_NO_DECODED_PIC,
             api->decoder_get_picture(decoder, &decoded_pic));
   EXPECT_EQ(XVC_DEC_OK, api->decoder_destroy(decoder));
 }

@@ -6,20 +6,33 @@ set(gtest_force_shared_crt ON CACHE BOOL "Use shared (DLL) run-time lib")
 add_subdirectory(googletest EXCLUDE_FROM_ALL)
 
 set(XVC_TEST_SOURCES
+    "xvc_test/all_intra_test.cc"
     "xvc_test/checksum_enc_dec_test.cc"
     "xvc_test/decoder_api_test.cc"
+    "xvc_test/decoder_helper.h"
     "xvc_test/decoder_resample_test.cc"
     "xvc_test/decoder_scalability_test.cc"
     "xvc_test/encode_decode_test.cc"
     "xvc_test/encoder_api_test.cc"
+    "xvc_test/encoder_helper.h"
     "xvc_test/hls_test.cc"
+    "xvc_test/resampler_test.cc"
     "xvc_test/residual_coding_test.cc"
     "xvc_test/resolution_test.cc"
     "xvc_test/restrictions_test.cc"
     "xvc_test/simd_test.cc"
-    "xvc_test/test_helper.h"
+    "xvc_test/transform_test.cc"
     "xvc_test/yuv_helper.cc"
     "xvc_test/yuv_helper.h")
+
+if(ENABLE_ASSERTIONS)
+  add_definitions(-UNDEBUG)
+  string(REGEX REPLACE "(^| )[/-]D *NDEBUG($| )" " " CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+endif()
+
+if(BUILD_SHARED_LIBS)
+  add_definitions(-DXVC_SHARED_LIB)
+endif()
 
 if(MSVC)
   set(cxx_flags /GS /W3 /WX /Za /EHsc)

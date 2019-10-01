@@ -1,28 +1,31 @@
 /******************************************************************************
-* Copyright (C) 2017, Divideon.
+* Copyright (C) 2018, Divideon.
 *
-* Redistribution and use in source and binary form, with or without
-* modifications is permitted only under the terms and conditions set forward
-* in the xvc License Agreement. For commercial redistribution and use, you are
-* required to send a signed copy of the xvc License Agreement to Divideon.
+* This library is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
 *
-* Redistribution and use in source and binary form is permitted free of charge
-* for non-commercial purposes. See definition of non-commercial in the xvc
-* License Agreement.
+* This library is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
 *
-* All redistribution of source code must retain this copyright notice
-* unmodified.
+* You should have received a copy of the GNU Lesser General Public
+* License along with this library; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 *
-* The xvc License Agreement is available at https://xvc.io/license/.
+* This library is also available under a commercial license.
+* Please visit https://xvc.io/license/ for more information.
 ******************************************************************************/
 
 #include <stdint.h>
 
 #include "xvc_common_lib/simd_cpu.h"
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include <intrin.h>
-#endif  // _MSC_VER
+#endif  // _WIN32
 
 #include <string.h>
 
@@ -43,7 +46,7 @@ std::set<CpuCapability> SimdCpu::GetMaskedCaps(uint32_t mask) {
 #if XVC_ARCH_X86
 
 static void cpuinfo_x86(uint32_t eax, uint32_t ecx, int registers[4]) {
-#ifdef _MSC_VER
+#ifdef _WIN32
   if (eax <= 1) {
     __cpuid(registers, eax);
   } else {
@@ -70,7 +73,7 @@ static void cpuinfo_x86(uint32_t eax, uint32_t ecx, int registers[4]) {
 }
 
 static bool cpu_xgetbv_x86() {
-#ifdef _MSC_VER
+#ifdef _WIN32
   auto xcr0 = _xgetbv(0);
   return (xcr0 & 6) == 6;
 #else
@@ -123,8 +126,8 @@ std::set<CpuCapability> SimdCpu::GetRuntimeCapabilities() {
 }
 
 #elif XVC_ARCH_ARM
-
-#ifdef _MSC_VER
+#if XVC_HAVE_NEON
+#ifdef _WIN32
 static int cpu_has_neon_arm() {
   return -1;
 }
@@ -155,6 +158,7 @@ static int cpu_has_neon_arm() {
 }
 #else
 #error "Unknown architecture for runtime NEON detection"
+#endif
 #endif
 
 std::set<CpuCapability> SimdCpu::GetRuntimeCapabilities() {

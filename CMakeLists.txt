@@ -5,6 +5,8 @@ endif()
 
 project (xvc CXX C)
 
+include(GNUInstallDirs)
+
 find_package(Threads REQUIRED)
 
 # Project options
@@ -22,6 +24,11 @@ endif()
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+endif()
+
+if(MSVC AND BUILD_TESTS AND BUILD_SHARED_LIBS)
+    message(WARNING "Unit-tests disabled when building shared libraries")
+    set(BUILD_TESTS OFF CACHE BOOL "Build all test code" FORCE)
 endif()
 
 # Target arch detection
@@ -67,8 +74,8 @@ else()
     add_definitions(-DXVC_HIGH_BITDEPTH=0)
 endif()
 
-if (BUILD_SHARED_LIBS)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+if(BUILD_SHARED_LIBS)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 add_subdirectory(src)
@@ -92,5 +99,4 @@ endforeach()
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/xvc.pc.in" "${CMAKE_CURRENT_BINARY_DIR}/xvc.pc" @ONLY)
 
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/xvc.pc"
-        DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig")
-
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
